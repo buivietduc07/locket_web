@@ -286,31 +286,24 @@ app.post('/api/logout', wrap(async (req, res) => {
       error: 'Không tìm thấy phiên đăng nhập.'
     });
   }
+  // Chỉ xóa file session trên máy tính
+  if (!process.env.VERCEL) {
+    const sessionPath = path.join(
+      __dirname,
+      'locket.js_session.json'
+    );
 
-  // Xóa token và thông tin đăng nhập trong bộ nhớ
-  session.uid = null;
-  session.email = null;
-  session.idToken = null;
-  session.refreshToken = null;
-  session.expiresAt = 0;
-
-  // Xóa file phiên đăng nhập
-// Chỉ xóa file session khi chạy trên máy tính
-if (!process.env.VERCEL) {
-  const sessionPath = path.join(
-    __dirname,
-    'locket.js_session.json'
-  );
-if (!process.env.VERCEL) {
-  if (fs.existsSync(sessionPath)) {
-    fs.unlinkSync(sessionPath);
+    if (fs.existsSync(sessionPath)) {
+      fs.unlinkSync(sessionPath);
+    }
   }
-}
+
   res.json({
     ok: true,
     message: 'Đăng xuất thành công.'
   });
 }));
+
 
 app.get('/api/profile',wrap(async(_req,res)=>res.json(clean(await client.user.getProfile()))));
 
