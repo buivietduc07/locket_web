@@ -48,12 +48,22 @@ async function redis(...args) {
     throw Object.assign(new Error('Không kết nối được Redis: kiểm tra URL REST và mạng.'), {status:503});
   }
   if (!response.ok) {
-    console.error('[Redis HTTP]', response.status);
-    const hint = response.status === 401 || response.status === 403
-      ? 'REST Token không đúng hoặc không có quyền ghi.'
-      : response.status === 404
-        ? 'REST URL không đúng.'
-        : 'Upstash trả HTTP ' + response.status + '.';
+    const status = response.status;
+    let upstream = '';
+    try {
+      const raw = await response.text();
+      const obj = JSON.parse(raw);
+      upstream = typeof obj.error === 'string' ? obj.error : '';
+    } catch (_) { /* Không đưa toàn bộ nội dung upstream vào log */ }
+    const safeReason = upstream.slice(0, 160).replace(/[^a-zA-Z0-9 _.,:;!()\/-]/g, '');
+    console.error('[Redis HTTP]', status, safeReason || '(no JSON error)');
+    const hint = status === 401
+      ? 'Token REST không hợp lệ (HTTP 401).'
+      : status === 403
+        ? 'Upstash từ chối truy cập (HTTP 403). Xem Redis HTTP trong Logs.'
+        : status === 404
+          ? 'REST URL không đúng (HTTP 404).'
+          : 'HTTP ' + status + '.';
     throw Object.assign(new Error('Redis: ' + hint), {status:503});
   }
   let body;
