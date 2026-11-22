@@ -22,18 +22,47 @@ const configured = () => Boolean(process.env.UPSTASH_REDIS_REST_URL &&
   process.env.LOCKET_SESSION_KEY && process.env.LOCKET_SESSION_KEY.length >= 32);
 const cryptKey = () => crypto.createHash('sha256').update(process.env.LOCKET_SESSION_KEY).digest();
 const redisKey = sid => 'locket:session:' + crypto.createHash('sha256').update(sid).digest('hex');
+function normalizedEnv(name) {
+  return String(process.env[name] || '').trim()
+    .replace(/^["']|["']$/g, '').trim();
+}
 async function redis(...args) {
-  if (!configured()) throw Object.assign(new Error('Thiếu cấu hình Redis hoặc LOCKET_SESSION_KEY.'),{status:503});
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const result = await fetch(url, {
-    method:'POST',
-    headers:{ Authorization:'Bearer ' + process.env.UPSTASH_REDIS_REST_TOKEN,
-      'Content-Type':'application/json' },
-    body:JSON.stringify(args)
-  });
-  if (!result.ok) throw Object.assign(new Error('Không thể kết nối Redis.'),{status:503});
-  const body = await result.json();
-  if (body.error) throw Object.assign(new Error('Redis từ chối yêu cầu.'),{status:503});
+  if (!configured()) throw Object.assign(
+    new Error('Thiếu cấu hình Redis hoặc LOCKET_SESSION_KEY.'), {status:503}
+  );
+  const url = normalizedEnv('UPSTASH_REDIS_REST_URL').replace(/\/$/, '');
+  const token = normalizedEnv('UPSTASH_REDIS_REST_TOKEN');
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(args),
+      signal: AbortSignal.timeout(8000)
+    });
+  } catch (err) {
+    console.error('[Redis transport]', err.message);
+    throw Object.assign(new Error('Không kết nối được Redis: kiểm tra URL REST và mạng.'), {status:503});
+  }
+  if (!response.ok) {
+    console.error('[Redis HTTP]', response.status);
+    const hint = response.status === 401 || response.status === 403
+      ? 'REST Token không đúng hoặc không có quyền ghi.'
+      : response.status === 404
+        ? 'REST URL không đúng.'
+        : 'Upstash trả HTTP ' + response.status + '.';
+    throw Object.assign(new Error('Redis: ' + hint), {status:503});
+  }
+  let body;
+  try { body = await response.json(); }
+  catch { throw Object.assign(new Error('Redis trả dữ liệu không hợp lệ.'), {status:503}); }
+  if (body.error) {
+    console.error('[Redis command error]', String(body.error).slice(0,200));
+    throw Object.assign(new Error('Redis từ chối lệnh: kiểm tra token ghi dữ liệu.'), {status:503});
+  }
   return body.result;
 }
 function encrypt(data) {
