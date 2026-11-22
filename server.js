@@ -301,6 +301,11 @@ if (!process.env.VERCEL) {
     'locket.js_session.json'
   );
 
+  if (fs.existsSync(sessionPath)) {
+    fs.unlinkSync(sessionPath);
+  }
+}
+
 if (!process.env.VERCEL) {
   if (fs.existsSync(sessionPath)) {
     fs.unlinkSync(sessionPath);
