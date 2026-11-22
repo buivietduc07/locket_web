@@ -291,13 +291,26 @@ app.get('/api/feed',wrap(async(req,res)=>{
 
   const history=await res.locals.client.moments.getMoments({limit:30,pageToken:cursor||null});
 
-  // locket.js getMoments() hiện gán user_uid bằng UID người đang xem
-  // cho mọi bài lịch sử, kể cả bài của bạn bè. Không dùng giá trị đó để
-  // xác định người đăng; chỉ dữ liệu feed thật mới có tác giả đáng tin.
-  const older=Array.isArray(history?.moments)
+  // SDK gán nhầm UID của người xem cho bài lịch sử. Lấy UID chủ media
+  // từ đường dẫn Firebase Storage users/<uid>/moments/... khi có đủ bằng chứng.
+  const mediaOwner = moment => {
+    for (const url of [moment.image_url, moment.thumbnail_url, moment.video_url]) {
+      if (typeof url !== 'string' || !url) continue;
+      try {
+        const parsed = new URL(url);
+        if (!parsed.hostname.endsWith('.googleapis.com')) continue;
+        const storagePath = decodeURIComponent(parsed.pathname);
+        const match = storagePath.match(/\/users\/([A-Za-z0-9_-]{8,128})\/moments\//);
+        if (match) return match[1];
+      } catch (_) { /* Không dùng URL không hợp lệ. */ }
+    }
+    return '';
+  };
+  const older = Array.isArray(history?.moments)
     ? history.moments.map(m => {
-        const {user_uid: _incorrectViewerUid, ...moment} = m;
-        return moment;
+        const { user_uid: _viewerUid, ...moment } = m;
+        const owner = mediaOwner(moment);
+        return owner ? { ...moment, user_uid: owner } : moment;
       })
     : [];
 
