@@ -253,7 +253,62 @@ async function loadFeedMore(){
   finally{feedLoading=false;}
 }
 async function showFriends(){const data=await api('/api/friends');const friends=arr(data,['friends','users','items','data']);state.friends=friends;view.innerHTML=`<h2 class="page-title">Bạn bè</h2><p class="intro">Chọn một người để xem ảnh và video họ chia sẻ với bạn.</p><div class="stack" id="friendList">${friends.length?friends.map((f,i)=>`<button type="button" class="person" data-friend="${i}">${avatar(f)}<div class="person-text"><div class="name">${esc(displayName(f))}</div><div class="sub">${esc(username(f)?'@'+username(f):uid(f))}</div></div><span class="pill">Xem ảnh</span></button>`).join(''):'<div class="empty">Chưa lấy được danh sách bạn bè.</div>'}</div>`;view.querySelectorAll('[data-friend]').forEach(b=>b.addEventListener('click',()=>showFriendMoments(friends[Number(b.dataset.friend)])))}
-async function showFriendMoments(f){state.activeFriend=f;loading();const user=username(f),id=uid(f);try{const params=new URLSearchParams(user?{username:user}:{uid:id});const data=await api('/api/friend-moments?'+params);const moments=arr(data,['moments','items','data','posts']);view.innerHTML=`<div class="section-row"><button type="button" id="backFriends" class="back">Bạn bè</button><div class="name">${esc(displayName(f))}</div></div><div class="stack">${moments.length?moments.map(momentCard).join(''):'<div class="empty">Không tìm thấy khoảnh khắc được chia sẻ với tài khoản này.</div>'}</div>`;$('#backFriends').onclick=showFriends}catch(e){empty(e.message);toast(e.message,true)}}
+async function showFriendMoments(friend) {
+  state.activeFriend=friend;
+  loading();
+  const friendUid=uid(friend);
+  if(!friendUid){empty('Không tìm được UID của người bạn này.');return;}
+  const display=displayName(friend);
+  const seen=new Set();
+  let cursor=null;
+  let loadingMore=false;
+
+  function appendMoments(items) {
+    const stack=$('#friendArchiveList');
+    if(!stack)return;
+    for(const m of items){
+      const id=String(m.moment_uid||m.canonical_uid||m.id||'');
+      if(id&&seen.has(id))continue;
+      if(id)seen.add(id);
+      const wrapper=document.createElement('div');
+      wrapper.innerHTML=momentCard({...m,user_uid:friendUid});
+      while(wrapper.firstChild) stack.appendChild(wrapper.firstChild);
+    }
+  }
+
+  async function loadPage(firstPage=false) {
+    if(loadingMore)return;
+    loadingMore=true;
+    const button=$('#moreFriendArchive');
+    if(button){button.disabled=true;button.textContent='Đang tải...';}
+    try{
+      const params=new URLSearchParams({uid:friendUid});
+      if(!firstPage&&cursor)params.set('cursor',cursor);
+      const data=await api('/api/friend-moments?'+params);
+      if(state.activeFriend!==friend)return;
+      appendMoments(arr(data,['moments','items','data']));
+      cursor=data.nextPageToken||null;
+      const stack=$('#friendArchiveList');
+      if(firstPage&&stack&&!stack.children.length)
+        stack.innerHTML='<div class="empty">Không có khoảnh khắc được chia sẻ trong lưu trữ.</div>';
+      if(button){button.hidden=!cursor;button.textContent='Xem bài cũ hơn';}
+    }catch(err){
+      toast('Không tải được lưu trữ: '+err.message,true);
+      if(firstPage)empty(err.message);
+      else if(button)button.textContent='Thử tải lại';
+    }finally{loadingMore=false;if(button)button.disabled=false;}
+  }
+
+  view.innerHTML=`<div class="section-row">
+    <button type="button" id="backFriends" class="back">Bạn bè</button>
+    <div class="name">${esc(display)}</div>
+  </div>
+  <div class="stack" id="friendArchiveList"></div>
+  <button type="button" class="primary full" id="moreFriendArchive" hidden>Xem bài cũ hơn</button>`;
+  $('#backFriends').onclick=showFriends;
+  $('#moreFriendArchive').onclick=()=>loadPage();
+  await loadPage(true);
+}
 
 async function showProfile() {
   const p = await api('/api/profile');
@@ -916,7 +971,7 @@ async function postMedia(event) {
   } finally { btn.disabled = false; }
 }
 
-async function init(){try{const res=await fetch('/api/bootstrap');const data=await res.json();$('#login').hidden=!!data.loggedIn;$('#app').hidden=!data.loggedIn;if(data.loggedIn){try{state.profile=await api('/api/profile');$('#accountLabel').textContent=username(state.profile)?'@'+username(state.profile):displayName(state.profile)}catch{}await openTab('feed')}}catch(err){toast('Không kết nối được server: '+err.message,true)}}
+async function init(){try{const res=await fetch('/api/bootstrap');const data=await res.json();$('#login').hidden=!!data.loggedIn;$('#app').hidden=!data.loggedIn;if(data.loggedIn){try{state.profile=await api('/api/profile');$('#accountLabel').textContent=username(state.profile)?'@'+username(state.profile):displayName(state.profile)}catch{}await openTab('camera')}}catch(err){toast('Không kết nối được server: '+err.message,true)}}
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const btn=e.currentTarget.querySelector('button');btn.disabled=true;try{const d=new FormData(e.currentTarget);await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:d.get('email'),password:d.get('password')})});await init();toast('Đăng nhập thành công')}catch(err){toast(err.message,true)}finally{btn.disabled=false}};
 document.querySelectorAll('.nav button').forEach(btn=>btn.onclick=()=>openTab(btn.dataset.tab));
 $('#reloadBtn').onclick=refresh;
