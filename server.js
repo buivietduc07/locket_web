@@ -49,22 +49,24 @@ async function redis(...args) {
   }
   if (!response.ok) {
     const status = response.status;
-    let upstream = '';
+    const upstream = await response.text().catch(() => '');
+    // Only return a small, sanitized reason. Never include request URL, headers or credentials.
+    let reason = '';
     try {
-      const raw = await response.text();
-      const obj = JSON.parse(raw);
-      upstream = typeof obj.error === 'string' ? obj.error : '';
-    } catch (_) { /* Không đưa toàn bộ nội dung upstream vào log */ }
-    const safeReason = upstream.slice(0, 160).replace(/[^a-zA-Z0-9 _.,:;!()\/-]/g, '');
-    console.error('[Redis HTTP]', status, safeReason || '(no JSON error)');
-    const hint = status === 401
-      ? 'Token REST không hợp lệ (HTTP 401).'
-      : status === 403
-        ? 'Upstash từ chối truy cập (HTTP 403). Xem Redis HTTP trong Logs.'
-        : status === 404
-          ? 'REST URL không đúng (HTTP 404).'
-          : 'HTTP ' + status + '.';
-    throw Object.assign(new Error('Redis: ' + hint), {status:503});
+      const obj = JSON.parse(upstream);
+      reason = String(obj.error || obj.message || '');
+    } catch {
+      reason = upstream.replace(/<[^>]*>/g, ' ').trim();
+    }
+    reason = reason.replace(/[A-Za-z0-9_-]{35,}/g, '[redacted]')
+      .replace(/https?:\/\/\S+/gi, '[url]')
+      .replace(/[^a-zA-Z0-9 .,;:()_/-]/g, ' ')
+      .replace(/\s+/g, ' ').slice(0, 160);
+    console.error('[Upstash REST]', { status, reason: reason || '(empty body)', contentType: response.headers.get('content-type') });
+    const message = status === 403
+      ? 'Upstash REST từ chối HTTP 403: ' + (reason || 'không có mô tả')
+      : 'Upstash REST HTTP ' + status + ': ' + (reason || 'không có mô tả');
+    throw Object.assign(new Error(message), {status:503});
   }
   let body;
   try { body = await response.json(); }
