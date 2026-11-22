@@ -167,7 +167,7 @@ function clean(v, depth=0) {
 
 }
 
-const wrap = fn => (req,res,next) => Promise.resolve(fn(req,res)).catch(next);
+const wrap = fn => (req,res,next) => Promise.resolve().then(() => fn(req,res,next)).catch(next);
 
 app.disable('x-powered-by');
 
