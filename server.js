@@ -291,7 +291,15 @@ app.get('/api/feed',wrap(async(req,res)=>{
 
   const history=await res.locals.client.moments.getMoments({limit:30,pageToken:cursor||null});
 
-  const older=Array.isArray(history?.moments)?history.moments:[];
+  // locket.js getMoments() hiện gán user_uid bằng UID người đang xem
+  // cho mọi bài lịch sử, kể cả bài của bạn bè. Không dùng giá trị đó để
+  // xác định người đăng; chỉ dữ liệu feed thật mới có tác giả đáng tin.
+  const older=Array.isArray(history?.moments)
+    ? history.moments.map(m => {
+        const {user_uid: _incorrectViewerUid, ...moment} = m;
+        return moment;
+      })
+    : [];
 
   let latest=[];
 
