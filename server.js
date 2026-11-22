@@ -301,11 +301,11 @@ if (!process.env.VERCEL) {
     'locket.js_session.json'
   );
 
+if (!process.env.VERCEL) {
   if (fs.existsSync(sessionPath)) {
     fs.unlinkSync(sessionPath);
   }
 }
-
   res.json({
     ok: true,
     message: 'Đăng xuất thành công.'
