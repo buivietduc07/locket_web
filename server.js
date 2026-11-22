@@ -748,7 +748,7 @@ app.get('/api/friend-moments',wrap(async(req,res)=>{
   const toTimestamp=m=>{
     const x=m.created_at||m.date||m.timestamp||0;
     if(typeof x==='object')return Number(x._seconds||x.seconds||0)*1000;
-    if(/^\\d+$/.test(String(x)))return Number(x)<1e11?Number(x)*1000:Number(x);
+    if(/^\d+$/.test(String(x)))return Number(x)<1e11?Number(x)*1000:Number(x);
     return Date.parse(String(x))||0;
   };
   moments.sort((x,y)=>toTimestamp(y)-toTimestamp(x));
