@@ -276,8 +276,8 @@ app.post('/api/recover-password', wrap(async (req, res) => {
 
 app.use('/api',(req,res,next)=>client.isAuthenticated()?next():res.status(401).json({error:'Cần đăng nhập Locket.'}));
 
+
 app.post('/api/logout', wrap(async (req, res) => {
-  const fs = require('node:fs');
   const session = client.session;
 
   if (!session) {
@@ -285,6 +285,31 @@ app.post('/api/logout', wrap(async (req, res) => {
       error: 'Không tìm thấy phiên đăng nhập.'
     });
   }
+
+  session.uid = null;
+  session.email = null;
+  session.idToken = null;
+  session.refreshToken = null;
+  session.expiresAt = 0;
+
+  if (!process.env.VERCEL) {
+    const fs = require('node:fs');
+    const sessionPath = path.join(
+      __dirname,
+      'locket.js_session.json'
+    );
+
+    if (fs.existsSync(sessionPath)) {
+      fs.unlinkSync(sessionPath);
+    }
+  }
+
+  res.json({
+    ok: true,
+    message: 'Đã xóa phiên trong tiến trình hiện tại.'
+  });
+}));
+
 
   // Xóa token và thông tin đăng nhập trong bộ nhớ
   session.uid = null;
