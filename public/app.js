@@ -420,7 +420,14 @@ return `
     }
   </div>
 `;
-}).join(''):'<div class="empty">Chưa có tin nhắn.</div>'}</div><form id="sendForm" class="chat-compose"><input name="message" maxlength="4000" autocomplete="off" required placeholder="Nhập tin nhắn..."><button class="primary" type="submit">Gửi</button></form>`;$('#backChats').onclick=showChats;
+}).join(''):'<div class="empty">Chưa có tin nhắn.</div>'}</div><form id="sendForm" class="chat-compose"><input name="message" maxlength="4000" autocomplete="off" required placeholder="Nhập tin nhắn..."><button class="primary" type="submit">Gửi</button></form>`;// Khi mở hội thoại, tải lại hoặc gửi tin nhắn: luôn đến cuối cuộc trò chuyện.
+  view.scrollTop = view.scrollHeight;
+  requestAnimationFrame(() => {
+    if (state.conversation === chat && $('#messages')) {
+      view.scrollTop = view.scrollHeight;
+    }
+  });
+  $('#backChats').onclick=showChats;
 view.querySelectorAll('[data-recall-message]').forEach(button => {
   button.onclick = async () => {
     if (!confirm('Thu hồi tin nhắn này trên Locket?')) return;
