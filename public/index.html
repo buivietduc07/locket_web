@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f8f6f2">
+<title>Locket Web</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div class="desktop-bg">
+  <section id="login" class="login-screen" hidden>
+    <div class="login-mark">Locket</div>
+    <h1>Khoảnh khắc của bạn</h1>
+    <p>Đăng nhập Locket để xem bạn bè, gửi tin nhắn và chia sẻ khoảnh khắc.</p>
+    <form id="loginForm">
+      <label>Email<input required type="email" name="email" autocomplete="username" placeholder="Email Locket"></label>
+      <label>Mật khẩu<input required type="password" name="password" autocomplete="current-password" placeholder="Mật khẩu"></label>
+      <button type="submit" class="primary">Đăng nhập</button>
+    </form>
+    <small>Chỉ truy cập bằng máy đang chạy server. Đây là ứng dụng web không chính thức.</small>
+  </section>
+  <div id="app" class="phone" hidden>
+    <header class="header"><div class="header-logo">Locket</div><div class="header-right"><span id="accountLabel">Đang kết nối</span><button id="reloadBtn" class="header-button" type="button">Làm mới</button></div></header>
+    <main id="view" class="view" aria-live="polite"></main>
+    <nav class="nav" aria-label="Chuyển màn hình">
+      <button data-tab="feed" class="active" type="button">Bảng tin</button>
+      <button data-tab="friends" type="button">Bạn bè</button>
+      <button data-tab="camera" class="camera-tab" type="button">Camera</button>
+      <button data-tab="chat" type="button">Tin nhắn</button>
+      <button data-tab="profile" type="button">Cá nhân</button>
+    </nav>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+</div>
+</body>
+</html>
