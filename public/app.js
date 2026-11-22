@@ -671,11 +671,61 @@ function startRecording() {
   if (!mime) { toast('Không có định dạng quay được hỗ trợ.', true); return false; }
   try {
     const chunks = [];
-    const recorder = new MediaRecorder(state.stream, { mimeType: mime });
+    const liveVideo = $('#liveVideo');
+    const mirrored = liveVideo?.style.transform.includes('scaleX(-1)');
+    let recordingStream = state.stream;
+    let mirrorStream = null;
+    let mirrorTimer = null;
+    let oldTransform = null;
+    if (mirrored && liveVideo?.videoWidth && typeof HTMLCanvasElement !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      canvas.width = liveVideo.videoWidth;
+      canvas.height = liveVideo.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx && typeof canvas.captureStream === 'function') {
+        try {
+          mirrorStream = canvas.captureStream(30);
+          for (const track of state.stream.getAudioTracks()) mirrorStream.addTrack(track);
+          const frame = () => {
+            if (!state.recorder || state.recorder.state === 'inactive') return;
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+            mirrorTimer = requestAnimationFrame(frame);
+          };
+          recordingStream = mirrorStream;
+          // Render one frame before recording begins.
+          ctx.save();
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+          mirrorTimer = requestAnimationFrame(frame);
+        } catch (error) {
+          mirrorStream?.getVideoTracks().forEach(track => track.stop());
+          mirrorStream = null;
+          recordingStream = state.stream;
+          if (mirrorTimer) cancelAnimationFrame(mirrorTimer);
+          mirrorTimer = null;
+        }
+      }
+    }
+    // Canvas captureStream is unavailable on some iPhones: show the same
+    // orientation that the original camera track actually records.
+    if (mirrored && !mirrorStream && liveVideo) {
+      oldTransform = liveVideo.style.transform;
+      liveVideo.style.transform = 'none';
+    }
+    const recorder = new MediaRecorder(recordingStream, { mimeType: mime });
     state.recorder = recorder;
     recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
     recorder.onerror = event => { clearRecordTimer(); toast('Quay video bị lỗi.', true); console.error(event); };
     recorder.onstop = () => {
+      if (mirrorTimer) cancelAnimationFrame(mirrorTimer);
+      if (mirrorStream) mirrorStream.getVideoTracks().forEach(track => track.stop());
+      if (oldTransform && liveVideo?.isConnected) liveVideo.style.transform = oldTransform;
       clearRecordTimer();
       $('#cameraStage')?.classList.remove('is-recording');
       $('#takePhoto')?.classList.remove('is-recording');
