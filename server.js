@@ -286,30 +286,6 @@ app.post('/api/logout', wrap(async (req, res) => {
     });
   }
 
-  session.uid = null;
-  session.email = null;
-  session.idToken = null;
-  session.refreshToken = null;
-  session.expiresAt = 0;
-
-  if (!process.env.VERCEL) {
-    const fs = require('node:fs');
-    const sessionPath = path.join(
-      __dirname,
-      'locket.js_session.json'
-    );
-
-    if (fs.existsSync(sessionPath)) {
-      fs.unlinkSync(sessionPath);
-    }
-  }
-
-  res.json({
-    ok: true,
-    message: 'Đã xóa phiên trong tiến trình hiện tại.'
-  });
-}));
-
 
   // Xóa token và thông tin đăng nhập trong bộ nhớ
   session.uid = null;
