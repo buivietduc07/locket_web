@@ -1,0 +1,26 @@
+{
+  "uid": "ccTUzKe5LudpyP3g3dzFwFx4Mnf1",
+  "email": "nakhoa26229@gmail.com",
+  "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjgxODA1ZTc2ZmQ1ZmEyZmQ5MWMyYmIzOWU0YjdlZjA1NDY5YmRkY2UiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiS2hvYSBOIiwicGljdHVyZSI6Imh0dHBzOi8vZmlyZWJhc2VzdG9yYWdlLmdvb2dsZWFwaXMuY29tOjQ0My92MC9iL2xvY2tldC1pbWcvby91c2VycyUyRmNjVFV6S2U1THVkcHlQM2czZHpGd0Z4NE1uZjElMkZwdWJsaWMlMkZwcm9maWxlX3BpYy53ZWJwP2FsdD1tZWRpYSZ0b2tlbj1mMmI4NmY2Mi00ZDVmLTRiZjUtODI2ZC0xZTYzMDNlYmI0ZDkiLCJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vbG9ja2V0LTQyNTJhIiwiYXVkIjoibG9ja2V0LTQyNTJhIiwiYXV0aF90aW1lIjoxNzk1MzQ4NzU5LCJ1c2VyX2lkIjoiY2NUVXpLZTVMdWRweVAzZzNkekZ3Rng0TW5mMSIsInN1YiI6ImNjVFV6S2U1THVkcHlQM2czZHpGd0Z4NE1uZjEiLCJpYXQiOjE3OTUzNDg3NTksImV4cCI6MTc5NTM1MjM1OSwiZW1haWwiOiJuYWtob2EyNjIyOUBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsibmFraG9hMjYyMjlAZ21haWwuY29tIl19LCJzaWduX2luX3Byb3ZpZGVyIjoicGFzc3dvcmQifX0.0bzZ1fblIg5Qx1qPD_mE4epxKa5_RFo-Q5djF1-KnDVjgatZu2-HnkMbspO-u64Fj-QP2160U-JuGTAjZCKUgdjFimcJ_EcWx88caQe7kHfUx-NR2YxaUB05ogAOI4lQ3kfbcTgt6DCGzv15dU5c2Ex0KUmVjZG4blXZQABHLoKNNYdMlJT3_Rm7LkIwiZTBwIjKGxVVw915-8ScuFfeJS2pwjDXeQIbvdaDmRl0TgRz7sHOgOV4pkcX6wHIbUcK2PpqvjeXkCh5awT52jfGWteFiz2cl4woFHfbrM-g4aQDytxdsISNa8jeAZ5hYVX4_HY65KEMvYBSXHLU1F0mww",
+  "refreshToken": "AMf-vByqe_mKtV_eee9eFAJMcFUp2FfIM2QeCtTsdyBEQwMuM1wxaH_b_9XMO8HHjgYbTYWfWi8geKBwvq-oi6Sm3Cx9724RiOEMuew87luU636bH9XP_47Sya1IodrIjFgIYKzJ-a2WmSNCP2I_-tDpOuLj0nSCHugPQjMr9FGaBkBISPpIgAoJnPM9GU4qELFCYei0Vv-65hSdEx3aArI4ujaOfrDDgQ",
+  "expiresAt": 1795352359485,
+  "device": {
+    "auto_emulate": true,
+    "installation_id": "3174f9d200a54ba7b2c328",
+    "bundle_id": "com.locket.Locket",
+    "app_version": "2.68.0",
+    "build_number": "2523",
+    "model_info": {
+      "name": "iPhone 13 Pro",
+      "model": "iPhone14,2",
+      "hw": "hw/iPhone14,2",
+      "ios": "17.4.1"
+    },
+    "custom_user_agent": null,
+    "custom_analytics": null,
+    "appcheck_token": null,
+    "instance_id_token": null
+  },
+  "login_email": "nakhoa26229@gmail.com",
+  "last_login": "2026-11-22T11:59:20.038Z"
+}
