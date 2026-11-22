@@ -708,17 +708,54 @@ app.get('/api/archive', wrap(async (req, res) => {
 
 
 app.get('/api/friend-moments',wrap(async(req,res)=>{
-
-  const username=String(req.query.username||'').trim().replace(/^@/,'');
-
   const uid=String(req.query.uid||'').trim();
+  const cursor=typeof req.query.cursor==='string'?req.query.cursor:'';
+  if(!/^[A-Za-z0-9_-]{1,128}$/.test(uid) || cursor.length>2048)
+    return res.status(400).json({error:'UID bạn bè hoặc trang lưu trữ không hợp lệ.'});
 
-  if(username && /^[\w.]{1,40}$/.test(username)) return res.json(clean(await res.locals.client.moments.getSharedMomentsByUsername(username,20)));
+  const client=res.locals.client;
+  const friends=await client.friends.getAllFriends();
+  if(!Array.isArray(friends) || !friends.some(friend=>String(friend.uid||friend.user_uid||friend.id||'')===uid))
+    return res.status(403).json({error:'Chỉ xem được khoảnh khắc của bạn bè.'});
 
-  if(uid && /^[\w-]{1,128}$/.test(uid) && typeof res.locals.client.moments.getSharedMomentsByUser==='function') return res.json(clean(await res.locals.client.moments.getSharedMomentsByUser(uid,20)));
-
-  res.status(400).json({error:'Chọn bạn bè có username hoặc UID hợp lệ.'});
-
+  let history;
+  try {
+    history=await client.moments.getMoments({
+      filteredByUserId:uid, limit:50, pageToken:cursor||null
+    });
+  }catch(err){
+    console.warn('[Friend archive] Không lấy được trang lịch sử:',err.message);
+    // Không trả các bài lẫn tác giả nếu truy vấn lưu trữ không thành công.
+    return res.status(502).json({error:'Chưa truy cập được lưu trữ của người bạn này.'});
+  }
+  const moments=Array.isArray(history?.moments)?history.moments.map(m=>({
+    ...m, user_uid:uid
+  })):[];
+  // Bài mới nhất có thể chưa xuất hiện trong Firestore history.
+  if(!cursor){
+    try{
+      const recent=await client.moments.getSharedMomentsByUser(uid,50);
+      const seen=new Set(moments.map(m=>String(m.moment_uid||m.canonical_uid||m.id||'')));
+      for(const m of Array.isArray(recent)?recent:[]){
+        const id=String(m.moment_uid||m.canonical_uid||m.id||'');
+        if(id&&!seen.has(id)){
+          moments.push({...m,user_uid:uid});
+          seen.add(id);
+        }
+      }
+    }catch(err){console.warn('[Friend archive] Không lấy được bài mới:',err.message);}
+  }
+  const toTimestamp=m=>{
+    const x=m.created_at||m.date||m.timestamp||0;
+    if(typeof x==='object')return Number(x._seconds||x.seconds||0)*1000;
+    if(/^\\d+$/.test(String(x)))return Number(x)<1e11?Number(x)*1000:Number(x);
+    return Date.parse(String(x))||0;
+  };
+  moments.sort((x,y)=>toTimestamp(y)-toTimestamp(x));
+  res.json(clean({
+    moments,
+    nextPageToken:history?.nextPageToken||null
+  }));
 }));
 
 app.get('/api/chats',wrap(async(_req,res)=>res.json(clean(await res.locals.client.chat.getConversations()))));
