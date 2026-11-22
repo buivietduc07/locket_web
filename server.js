@@ -107,9 +107,10 @@ function decryptPassword(masterPassword) {
   ]).toString('utf8');
 }
 
-const token = crypto.randomBytes(32).toString('hex');
-
-const host = '127.0.0.1';
+const token = process.env.LOCKET_API_SECRET;
+if (!token || token.length < 32) {
+  throw new Error('Thiếu LOCKET_API_SECRET');
+}
 
 const port = Number(process.env.PORT || 3000);
 
@@ -300,12 +301,6 @@ if (!process.env.VERCEL) {
     __dirname,
     'locket.js_session.json'
   );
-
-  if (fs.existsSync(sessionPath)) {
-    fs.unlinkSync(sessionPath);
-  }
-}
-
 if (!process.env.VERCEL) {
   if (fs.existsSync(sessionPath)) {
     fs.unlinkSync(sessionPath);
