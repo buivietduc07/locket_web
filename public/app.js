@@ -18,7 +18,7 @@ function date(v){if(!v)return '';let n=typeof v==='number'&&v<1e11?v*1000:v;cons
 function caption(item){const c=deep(item,['caption','text','note','message']);return typeof c==='string'?c:''}
 function loading(){view.innerHTML='<div class="empty">Đang tải dữ liệu...</div>'}
 function empty(s){view.innerHTML=`<div class="empty">${esc(s)}</div>`}
-async function api(url,options={}){const response=await fetch(url,{...options,headers:{'X-Local-Token':state.token,...(options.headers||{})}});const str=await response.text();let body;try{body=JSON.parse(str)}catch{throw Error(`HTTP ${response.status}: phản hồi không phải JSON`)}if(!response.ok)throw Error(body.error||`HTTP ${response.status}`);return body}
+async function api(url,options={}){const response=await fetch(url,{...options,credentials:'same-origin',headers:{...(options.headers||{})}});const str=await response.text();let body;try{body=JSON.parse(str)}catch{throw Error(`HTTP ${response.status}: phản hồi không phải JSON`)}if(!response.ok)throw Error(body.error||`HTTP ${response.status}`);return body}
 async function refresh(){await openTab(state.tab)}
 function stopCamera(){clearRecordTimer();if(state.recorder&&state.recorder.state==='recording'){state.recorder.onstop=null;state.recorder.stop()}state.recorder=null;if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null}}
 async function openTab(tab){if(state.tab==='camera'&&tab!=='camera')stopCamera();state.tab=tab;state.activeFriend=null;state.conversation=null;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));loading();try{if(tab==='feed')await showFeed();if(tab==='friends')await showFriends();if(tab==='camera')showCamera();if(tab==='chat')await showChats();if(tab==='profile')await showProfile()}catch(e){empty(e.message);toast(e.message,true)}}
@@ -859,7 +859,7 @@ async function postMedia(event) {
   } finally { btn.disabled = false; }
 }
 
-async function init(){try{const res=await fetch('/api/bootstrap');const data=await res.json();state.token=data.token;$('#login').hidden=!!data.loggedIn;$('#app').hidden=!data.loggedIn;if(data.loggedIn){try{state.profile=await api('/api/profile');$('#accountLabel').textContent=username(state.profile)?'@'+username(state.profile):displayName(state.profile)}catch{}await openTab('feed')}}catch(err){toast('Không kết nối được server: '+err.message,true)}}
+async function init(){try{const res=await fetch('/api/bootstrap');const data=await res.json();$('#login').hidden=!!data.loggedIn;$('#app').hidden=!data.loggedIn;if(data.loggedIn){try{state.profile=await api('/api/profile');$('#accountLabel').textContent=username(state.profile)?'@'+username(state.profile):displayName(state.profile)}catch{}await openTab('feed')}}catch(err){toast('Không kết nối được server: '+err.message,true)}}
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const btn=e.currentTarget.querySelector('button');btn.disabled=true;try{const d=new FormData(e.currentTarget);await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:d.get('email'),password:d.get('password')})});await init();toast('Đăng nhập thành công')}catch(err){toast(err.message,true)}finally{btn.disabled=false}};
 document.querySelectorAll('.nav button').forEach(btn=>btn.onclick=()=>openTab(btn.dataset.tab));
 $('#reloadBtn').onclick=refresh;
