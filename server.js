@@ -226,66 +226,6 @@ async function notifyTelegramLogin(email, username) {
     console.error('[Telegram]', response.status, result.description || 'Gửi thông báo thất bại');
   }
 }
-// Yêu cầu email đặt lại mật khẩu qua Firebase Auth của Locket.
-// Không lưu mật khẩu và không tiết lộ email nào tồn tại.
-app.post('/api/forgot-password', wrap(async (req,res) => {
-  const email=String(req.body?.email||'').trim().toLowerCase();
-  if(email.length>320||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return res.status(400).json({error:'Nhập địa chỉ email hợp lệ.'});
-  if(!configured()) return res.status(503).json({error:'Dịch vụ tạm thời chưa sẵn sàng.'});
-
-  // Giới hạn theo cặp IP + email để nhiều người cùng IP không chặn lẫn nhau.
-  // Namespace v2 không dùng bộ đếm IP cũ đã tích lũy từ các lần thử trước.
-  const ip=String(req.headers['x-forwarded-for']||req.ip||'unknown').split(',')[0].trim();
-  const ipHash=crypto.createHash('sha256').update(ip).digest('hex');
-  const emailHash=crypto.createHash('sha256').update(email).digest('hex');
-  const ipEmailKey='locket:reset:v2:'+ipHash+':'+emailHash;
-  const emailKey='locket:reset:email:v2:'+emailHash;
-  const generic='Nếu email có tài khoản Locket và được hỗ trợ, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu. Hãy kiểm tra cả thư rác.';
-  // Thời gian chờ 60 giây giữa hai email cho cùng một địa chỉ.
-  const allowed=await redis('SET',emailKey,'1','EX',60,'NX');
-  if(allowed!=='OK')
-    return res.status(429).json({error:'Email này vừa được yêu cầu đặt lại mật khẩu. Vui lòng thử lại sau 60 giây.'});
-  // 5 yêu cầu / giờ cho mỗi cặp IP và email; mỗi lượt bấm chỉ đếm một lần.
-  const count=Number(await redis('INCR',ipEmailKey));
-  if(count===1)await redis('EXPIRE',ipEmailKey,3600);
-  if(count>5){
-    await redis('DEL',emailKey).catch(()=>{});
-    return res.status(429).json({error:'Đã vượt quá 5 lần yêu cầu cho email này trong một giờ. Vui lòng thử lại sau.'});
-  }
-
-  const resetUrl='https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key='+
-    encodeURIComponent(require('locket.js/lib/session').SessionManager.FIREBASE_API_KEY);
-
-  let response;
-  try {
-    response=await fetch(resetUrl,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Firebase-Locale':'vi'},
-      body:JSON.stringify({requestType:'PASSWORD_RESET',email}),
-      signal:AbortSignal.timeout(10000)
-    });
-  }catch(err){
-    await redis('DEL',emailKey).catch(()=>{});
-    console.warn('[Password reset] Firebase request failed:',err.name);
-    return res.status(502).json({error:'Không kết nối được dịch vụ gửi email đặt lại mật khẩu. Vui lòng thử lại sau.'});
-  }
-  if(!response.ok){
-    const result=await response.json().catch(()=>({}));
-    const code=String(result?.error?.message||'UNKNOWN').split(' : ')[0];
-    console.warn('[Password reset] Firebase HTTP',response.status,'code:',code.replace(/[^A-Z_0-9-]/gi,'').slice(0,60));
-    // Đừng tiết lộ tài khoản/email nào tồn tại.
-    if(['EMAIL_NOT_FOUND','USER_NOT_FOUND'].includes(code))
-      return res.json({ok:true,message:generic});
-    await redis('DEL',emailKey).catch(()=>{});
-    const explanation=code==='OPERATION_NOT_ALLOWED'
-      ? 'Dịch vụ Locket chưa cho phép gửi email đặt lại mật khẩu bằng cách này.'
-      : 'Firebase từ chối yêu cầu gửi email ('+response.status+'). Kiểm tra Vercel Logs mục Password reset.';
-    return res.status(502).json({error:explanation});
-  }
-  res.json({ok:true,message:'Firebase đã tiếp nhận yêu cầu đặt lại mật khẩu. Hãy kiểm tra email và thư rác; việc nhận thư còn phụ thuộc vào dịch vụ Locket.'});
-}));
-
 app.post('/api/login',wrap(async(req,res)=>{
   const {email,password}=req.body||{};
   if(typeof email!=='string'||typeof password!=='string'||
