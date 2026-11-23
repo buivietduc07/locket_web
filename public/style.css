@@ -1063,3 +1063,6 @@ button:disabled {
 .studio-color-choice{width:36px;height:36px;min-width:36px;min-height:36px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:var(--chip-color);cursor:pointer;box-shadow:0 2px 7px #0004}
 .studio-color-choice.selected{outline:3px solid #a39aff;outline-offset:3px}
 .send-studio #postCaption{text-shadow:0 1px 4px #000b;font-weight:750}
+
+/* Preview caption with the exact style selected from Customize Studio */
+.send-studio #postCaption{background:rgba(30,34,40,.65);color:#fff;text-shadow:none;transition:background .15s ease,color .15s ease}
