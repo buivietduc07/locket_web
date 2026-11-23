@@ -837,10 +837,24 @@ const STUDIO_GROUPS = [
   {title:'Caption gợi ý',items:[['Hôm nay','Hôm nay có một chút đáng yêu.','purple'],['Đi chơi','Một chuyến đi thật vui!','sunset'],['Đói rồi','Ăn gì bây giờ?','amber'],['Chill','Một chút bình yên.','mint'],['Nhớ ai đó','Có ai đang nhớ mình không?','ice'],['Bạn thân','Có bạn là có niềm vui.','pink'],['Khoảnh khắc','Giữ lại khoảnh khắc này.','blue'],['Cuối tuần','Cuối tuần nhẹ nhàng.','green']]},
   {title:'Trang trí caption',items:[['Tối giản','Một ngày thật đẹp.','neutral'],['Dễ thương','Đáng yêu quá đi!','pink'],['Năng lượng','Hôm nay thật rực rỡ!','sunset'],['Hoài niệm','Một ngày để nhớ.','ice'],['Tâm trạng','Có đôi điều muốn nói...','purple']]}
 ];
+
+const STUDIO_TEXT_COLORS = [
+  ['Trắng','#FFFFFF'],['Đen','#111111'],['Đỏ','#FF365B'],['Hồng','#FF65B5'],
+  ['Cam','#FF9D42'],['Vàng','#FFD346'],['Xanh lá','#38E58B'],['Xanh dương','#39AAFF'],
+  ['Tím','#A98AFF'],['Xanh ngọc','#35E0DB']
+];
+const STUDIO_PRESET_COLORS = {
+  neutral:'#FFFFFF',amber:'#FFD346',purple:'#A98AFF',ice:'#39AAFF',
+  sunset:'#FF9D42',mint:'#38E58B',green:'#38E58B',red:'#FF365B',
+  pink:'#FF65B5',blue:'#39AAFF'
+};
 function studioMarkup() {
   return '<div id="customizeSheet" class="customize-sheet" hidden>'+
     '<div class="customize-top"><strong>CUSTOMIZE STUDIO</strong><button type="button" id="closeCustomize" aria-label="Đóng">×</button></div>'+
-    '<p class="customize-hint">Các mẫu sẽ điền caption vào khoảnh khắc. Màu nút chỉ dùng để phân biệt mẫu, không làm đổi màu chữ trên bài Locket.</p>'+
+    '<p class="customize-hint">Chọn màu chữ và caption. Màu chữ được gửi trực tiếp vào overlay của bài Locket.</p>'+
+    '<section class="customize-group"><h3>Màu chữ</h3><div class="studio-color-row">'+
+    STUDIO_TEXT_COLORS.map((entry,i)=>'<button type="button" class="studio-color-choice'+(i===0?' selected':'')+'" data-text-color="'+esc(entry[1])+'" aria-label="'+esc(entry[0])+'" title="'+esc(entry[0])+'" style="--chip-color:'+esc(entry[1])+'"></button>').join('')+
+    '</div></section>'+
     STUDIO_GROUPS.map(group=>'<section class="customize-group"><h3>'+esc(group.title)+'</h3><div class="customize-chips">'+
     group.items.map(item=>'<button type="button" class="customize-chip '+esc(item[2])+'" data-custom-text="'+esc(item[1])+'" data-custom-action="'+esc(item[3]||'text')+'">'+esc(item[0])+'</button>').join('')+
     '</div></section>').join('')+'</div>';
@@ -857,6 +871,7 @@ function chooseFile(file) {
   }
   recipientMode = 'all';
   selectedRecipients.clear();
+  let selectedTextColor = '#FFFFFF';
   const isVideo = file.type.startsWith('video/');
   view.innerHTML = `
     <div class="locket-send-screen send-studio">
@@ -865,7 +880,7 @@ function chooseFile(file) {
       <form id="postForm" class="send-form">
         <div class="send-media">
           ${isVideo ? `<video src="${esc(state.mediaPreview)}" controls playsinline preload="metadata"></video>` : `<img src="${esc(state.mediaPreview)}" alt="Khoảnh khắc xem trước">`}
-          <input id="postCaption" name="caption" type="text" maxlength="250" placeholder="Nhập tin nhắn..." aria-label="Caption">
+          <input id="postCaption" name="caption" type="text" maxlength="250" placeholder="Nhập tin nhắn..." aria-label="Caption" style="color:#FFFFFF">
         </div>
         <div class="send-media-info">${isVideo ? 'Video' : 'Ảnh'} · ${(file.size / 1024 / 1024).toFixed(2)} MB</div>
         <div class="studio-actions">
@@ -900,6 +915,24 @@ function chooseFile(file) {
     a.click();
   };
   $('#postForm').onsubmit = postMedia;
+  const colorInput = document.createElement('input');
+  colorInput.type = 'hidden';
+  colorInput.name = 'textColor';
+  colorInput.value = selectedTextColor;
+  $('#postForm').appendChild(colorInput);
+  const applyTextColor = color => {
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) return;
+    selectedTextColor = color.toUpperCase();
+    colorInput.value = selectedTextColor;
+    $('#postCaption').style.color = selectedTextColor;
+    $('#customizeSheet').querySelectorAll('[data-text-color]').forEach(button => {
+      button.classList.toggle('selected',button.dataset.textColor.toUpperCase() === selectedTextColor);
+    });
+  };
+  $('#customizeSheet').addEventListener('click', event => {
+    const button = event.target.closest('[data-text-color]');
+    if (button) applyTextColor(button.dataset.textColor);
+  });
   $('#cancelMoment').onclick = $('#backToCamera').onclick;
   $('#openCustomize').onclick = () => { $('#customizeSheet').hidden = false; };
   $('#closeCustomize').onclick = () => { $('#customizeSheet').hidden = true; };
@@ -908,6 +941,8 @@ function chooseFile(file) {
     if (!button) return;
     const input = $('#postCaption');
     const action = button.dataset.customAction;
+    const presetStyle = [...button.classList].find(name => Object.prototype.hasOwnProperty.call(STUDIO_PRESET_COLORS,name));
+    if(presetStyle) applyTextColor(STUDIO_PRESET_COLORS[presetStyle]);
     if (action === 'focus') {
       $('#customizeSheet').hidden = true;
       input.focus();
@@ -1014,6 +1049,7 @@ async function postMedia(event) {
   const data = new FormData();
   data.append('media', file, file.name);
   data.append('caption', form.elements.caption.value);
+  data.append('textColor', form.elements.textColor?.value || '#FFFFFF');
   data.append('visibility', recipientMode);
   if (recipientMode === 'selected') {
     data.append('recipients', JSON.stringify([...selectedRecipients]));
