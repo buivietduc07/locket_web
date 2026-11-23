@@ -842,7 +842,7 @@ const STUDIO_GROUPS = [
 const STUDIO_PRESET_STYLE = {
   neutral:{colors:[],textColor:'#FFFFFF'},
   amber:{colors:['#F7C844','#E9AC1C'],textColor:'#24201A'},
-  purple:{colors:['#7948EE','#5944DF'],textColor:'#FFFFFF'},
+  purple:{colors:['#8A40F2','#5746E9'],textColor:'#FFFFFF'},
   ice:{colors:['#C5F3FF','#81D3ED'],textColor:'#174052'},
   sunset:{colors:['#FFB363','#F08B3A'],textColor:'#26211C'},
   mint:{colors:['#58EFC0','#2CCBC6'],textColor:'#143D37'},
