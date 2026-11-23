@@ -759,6 +759,32 @@ app.get('/api/friend-moments',wrap(async(req,res)=>{
 
 app.get('/api/chats',wrap(async(_req,res)=>res.json(clean(await res.locals.client.chat.getConversations()))));
 
+
+const typingKey=(sender,recipient)=>'locket:typing:'+crypto.createHash('sha256').update(sender+':'+recipient).digest('hex');
+// Typing indicators from this web client only, not native Locket.
+app.post('/api/chat-typing',wrap(async(req,res)=>{
+  const receiver=String(req.body?.uid||'');
+  if(!/^[\w-]{1,128}$/.test(receiver))return res.status(400).json({error:'UID không hợp lệ.'});
+  const sender=String(res.locals.client.session.uid||'');
+  if(!sender)return res.status(401).json({error:'Chưa đăng nhập.'});
+  const all=await res.locals.client.friends.getAllFriends();
+  if(!Array.isArray(all)||!all.some(f=>String(f.uid||f.id||'')===receiver))return res.status(403).json({error:'Không phải bạn bè.'});
+  const key=typingKey(sender,receiver);
+  if(req.body?.typing===true)await redis('SET',key,'1','EX',7);
+  else await redis('DEL',key);
+  res.json({ok:true});
+}));
+app.get('/api/chat-typing',wrap(async(req,res)=>{
+  const other=String(req.query.uid||'');
+  if(!/^[\w-]{1,128}$/.test(other))return res.status(400).json({error:'UID không hợp lệ.'});
+  const sender=String(res.locals.client.session.uid||'');
+  if(!sender)return res.status(401).json({error:'Chưa đăng nhập.'});
+  const all=await res.locals.client.friends.getAllFriends();
+  if(!Array.isArray(all)||!all.some(f=>String(f.uid||f.id||'')===other))return res.status(403).json({error:'Không phải bạn bè.'});
+  const typing=await redis('GET',typingKey(other,sender));
+  res.json({typing:typing==='1'});
+}));
+
 app.get('/api/messages',wrap(async(req,res)=>{
 
   const uid=String(req.query.uid||'').trim();
