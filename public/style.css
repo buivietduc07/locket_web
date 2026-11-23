@@ -1074,3 +1074,49 @@ button:disabled {
 .customize-top button:active{transform:scale(.93)}
 @media(max-width:550px){.customize-top{top:-14px;margin:-14px -11px 0;padding:10px 11px 8px}}
 @media(prefers-reduced-motion:reduce){.customize-sheet{animation:none}.customize-top button{transition:none}}
+
+
+/* Hiệu ứng chuyển động nằm trong nền capsule caption, không đè lên ảnh */
+.send-studio .caption-fx-shell{
+  position:absolute;left:50%;bottom:22px;transform:translateX(-50%);
+  width:min(72%,310px);min-height:44px;border-radius:28px;
+  overflow:hidden;isolation:isolate;background:rgba(30,34,40,.65);
+  box-shadow:0 3px 12px rgba(0,0,0,.12);
+}
+.send-studio .caption-fx-shell #postCaption{
+  position:relative;left:auto;bottom:auto;transform:none;
+  display:block;width:100%;height:44px;padding:11px 15px;
+  border:0;border-radius:28px;background:transparent!important;
+  color:#fff;text-align:center;z-index:2;
+}
+.caption-fx-particles{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
+.caption-fx-particle{
+  position:absolute;top:-18px;left:var(--fx-left);font-size:var(--fx-size);
+  opacity:0;color:#fff;line-height:1;
+  text-shadow:0 1px 3px rgba(0,0,0,.18);
+  will-change:transform,opacity;
+  animation:caption-fall var(--fx-time) linear var(--fx-delay) infinite;
+}
+.caption-fx-shell[data-effect="hearts"] .caption-fx-particle{color:#ffe2ef;animation-name:caption-float}
+.caption-fx-shell[data-effect="petals"] .caption-fx-particle{color:#fff8ff;animation-name:caption-float}
+.caption-fx-shell[data-effect="sparkles"] .caption-fx-particle{color:#fff7b9;animation-name:caption-shimmer}
+.caption-fx-shell[data-effect="sunlight"] .caption-fx-particle{color:#fff7c5;animation-name:caption-shimmer}
+.caption-fx-shell[data-effect="leaves"] .caption-fx-particle{color:#fff2cd}
+@keyframes caption-fall{
+  0%{transform:translate3d(-8px,-10px,0) rotate(0deg);opacity:0}
+  12%{opacity:.8}
+  85%{opacity:.8}
+  100%{transform:translate3d(11px,75px,0) rotate(110deg);opacity:0}
+}
+@keyframes caption-float{
+  0%{transform:translate3d(-4px,65px,0) rotate(-15deg);opacity:0}
+  20%,75%{opacity:.8}
+  100%{transform:translate3d(12px,-22px,0) rotate(24deg);opacity:0}
+}
+@keyframes caption-shimmer{
+  0%,100%{transform:translate3d(0,24px,0) scale(.65);opacity:0}
+  35%{transform:translate3d(3px,10px,0) scale(1.15);opacity:.95}
+  65%{transform:translate3d(-3px,-2px,0) scale(.8);opacity:.35}
+}
+@media(max-width:550px){.send-studio .caption-fx-shell{bottom:18px}}
+@media(prefers-reduced-motion:reduce){.caption-fx-particle{animation:none;opacity:.3;top:15px}}
