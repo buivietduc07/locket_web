@@ -952,7 +952,7 @@ function chooseFile(file) {
   }
   applyPresetStyle('neutral');
   $('#cancelMoment').onclick = $('#backToCamera').onclick;
-  $('#openCustomize').onclick = () => { $('#customizeSheet').hidden = false; };
+  $('#openCustomize').onclick = () => { const sheet = $('#customizeSheet'); sheet.hidden = false; sheet.scrollTop = 0; };
   $('#closeCustomize').onclick = () => { $('#customizeSheet').hidden = true; };
   $('#customizeSheet').addEventListener('click', event => {
     const button = event.target.closest('[data-custom-action]');
