@@ -852,7 +852,7 @@ app.post('/api/chat/photo',upload.single('photo'),wrap(async(req,res)=>{
   if(!/^[\w-]{1,128}$/.test(id))
     return res.status(502).json({error:'Ảnh đã đăng nhưng Locket không trả ID để gửi vào chat.'});
   try{
-    await client.chat.sendMoment(other,id,caption||null);
+    await client.chat.sendMoment(other,id,caption||'Đã gửi ảnh');
   }catch(err){
     return res.status(502).json({error:'Ảnh đã đăng lên Locket nhưng không gửi được vào hội thoại: '+err.message});
   }
