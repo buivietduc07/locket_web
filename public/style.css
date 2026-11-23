@@ -1138,3 +1138,9 @@ button:disabled {
 .chat-action-menu #deleteForEveryone{background:#fce9e9;color:#b82028}
 .chat-action-menu button[hidden]{display:none!important}
 @media(prefers-reduced-motion:reduce){.typing-dots i{animation:none}}
+
+/* Ảnh trong trò chuyện */
+.chat-photo-select{display:grid;place-items:center;border:1px solid #e3ded4;border-radius:13px;background:#fff;color:#28241e;font-size:13px;font-weight:750;padding:0 12px;cursor:pointer;flex:0 0 auto}
+.chat-photo-select.sending{opacity:.45;pointer-events:none}
+.messages .chat-photo{display:block;max-width:min(220px,100%);max-height:310px;width:auto;height:auto;object-fit:contain;border-radius:12px;margin:0 0 4px}
+.messages .bubble:has(.chat-photo){padding:5px;background:transparent;border:0;max-width:78%}
