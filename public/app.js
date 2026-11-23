@@ -21,7 +21,7 @@ function empty(s){view.innerHTML=`<div class="empty">${esc(s)}</div>`}
 async function api(url,options={}){const response=await fetch(url,{...options,credentials:'same-origin',headers:{...(options.headers||{})}});const str=await response.text();let body;try{body=JSON.parse(str)}catch{throw Error(`HTTP ${response.status}: phản hồi không phải JSON`)}if(!response.ok)throw Error(body.error||`HTTP ${response.status}`);return body}
 async function refresh(){await openTab(state.tab)}
 function stopCamera(){clearRecordTimer();if(state.recorder&&state.recorder.state==='recording'){state.recorder.onstop=null;state.recorder.stop()}state.recorder=null;if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null}}
-async function openTab(tab){if(state.tab==='camera'&&tab!=='camera')stopCamera();state.tab=tab;state.activeFriend=null;state.conversation=null;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));loading();try{if(tab==='feed')await showFeed();if(tab==='friends')await showFriends();if(tab==='camera')showCamera();if(tab==='chat')await showChats();if(tab==='profile')await showProfile()}catch(e){empty(e.message);toast(e.message,true)}}
+async function openTab(tab){closeLiveChat();if(state.tab==='camera'&&tab!=='camera')stopCamera();state.tab=tab;state.activeFriend=null;state.conversation=null;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));loading();try{if(tab==='feed')await showFeed();if(tab==='friends')await showFriends();if(tab==='camera')showCamera();if(tab==='chat')await showChats();if(tab==='profile')await showProfile()}catch(e){empty(e.message);toast(e.message,true)}}
 
 function momentCard(m, isArchive = false) {
   const poster = media(m);
@@ -430,7 +430,7 @@ function chatTimestamp(chat) {
   return Date.parse(value) || 0;
 }
 
-async function showChats(){
+async function showChats(){closeLiveChat();
   if (!state.friends.length) {
     const friendData = await api('/api/friends').catch(() => []);
     state.friends = arr(friendData, [
@@ -443,75 +443,153 @@ async function showChats(){
   'items',
   'data'
 ])].sort((a, b) => chatTimestamp(b) - chatTimestamp(a));view.innerHTML=`<h2 class="page-title">Tin nhắn</h2><p class="intro">Mở hội thoại để đọc và nhắn tin cho bạn bè.</p><div class="stack">${chats.length?chats.map((c,i)=>{const recent=field(c,'latest_message','latestMessage','last_message','lastMessage');let preview=typeof recent==='string'?recent:caption(recent);return `<button type="button" class="conversation" data-chat="${i}">${chatAvatar(c)}<div class="conversation-text"><div class="name">${esc(chatDisplayName(c))}</div><div class="sub">${esc(preview||chatPeer(c)||'Hội thoại')}</div></div>${Number(field(c,'unread_count','unreadCount'))>0?`<span class="pill">${esc(field(c,'unread_count','unreadCount'))}</span>`:''}</button>`}).join(''):'<div class="empty">Chưa có cuộc trò chuyện.</div>'}</div>`;view.querySelectorAll('[data-chat]').forEach(b=>b.onclick=()=>showMessages(chats[Number(b.dataset.chat)]))}
+
+let activeChatStop = null;
+function closeLiveChat(){
+  if(activeChatStop){activeChatStop();activeChatStop=null;}
+}
 function messageItems(result){return arr(result,['messages','items','data','documents'])}
-async function showMessages(chat){state.conversation=chat;const other=chatPeer(chat);if(!other){toast('Không tìm thấy peer_uid của hội thoại',true);return}loading();try{const [data]=await Promise.all([api('/api/messages?uid='+encodeURIComponent(other))]);const messages=messageItems(data);const myUid=uid(state.profile);const name = chatDisplayName(chat);view.innerHTML=`<div class="section-row"><button class="back" id="backChats" type="button">Tin nhắn</button><div class="name">${esc(name)}</div><button class="secondary" id="reloadMessages" type="button">Tải lại</button></div><div class="messages" id="messages">${messages.length?messages.map(m=>{const body=caption(m)||String(deep(m,['content','body'])||'Tin nhắn không có nội dung văn bản');const sender=String(deep(m,['sender_uid','senderUid','sender_id','senderId','from_uid','fromUid'])||'');
-const isMine = sender && myUid && sender === myUid;
+async function showMessages(chat){
+  closeLiveChat();
+  state.conversation=chat;
+  const other=chatPeer(chat);
+  if(!other){toast('Không tìm thấy người nhận.',true);return;}
+  const myUid=uid(state.profile);
+  const name=chatDisplayName(chat);
+  const localKey='locket:hidden-messages:'+myUid+':'+other;
+  let hiddenIds=[];
+  try{hiddenIds=JSON.parse(localStorage.getItem(localKey)||'[]');if(!Array.isArray(hiddenIds))hiddenIds=[];}catch{hiddenIds=[];}
+  const hidden=new Set(hiddenIds);
+  let alive=true, busy=false, lastSignature='', firstLoad=true, typingAt=0, typingBusy=false;
+  const stop=()=>{alive=false;clearInterval(timer);};
+  activeChatStop=stop;
+  loading();
+  view.innerHTML='<div class="section-row"><button class="back" id="backChats" type="button">Tin nhắn</button><div class="name">'+esc(name)+'</div><button class="secondary" id="reloadMessages" type="button">Tải lại</button></div>'+
+    '<div class="messages" id="messages"></div>'+
+    '<div id="typingIndicator" class="typing-indicator" hidden>Đang soạn tin nhắn <span class="typing-dots"><i></i><i></i><i></i></span></div>'+
+    '<form id="sendForm" class="chat-compose"><input name="message" maxlength="4000" autocomplete="off" required placeholder="Nhập tin nhắn..."><button class="primary" type="submit">Gửi</button></form>'+
+    '<div class="chat-action-overlay" id="chatActionOverlay" hidden><div class="chat-action-menu" id="chatActionMenu"><div class="chat-action-title">Tùy chọn tin nhắn</div><button type="button" id="deleteForMe">Thu hồi về phía tôi</button><button type="button" id="deleteForEveryone">Thu hồi tất cả</button><button type="button" id="cancelChatAction">Hủy</button></div></div>';
+  const root=$('#messages'), form=$('#sendForm'), overlay=$('#chatActionOverlay');
+  let selected=null, pressTimer=null, pressStartX=0,pressStartY=0;
 
-const messageUid = String(
-  field(m, 'message_id', 'messageId') || ''
-);
-
-const conversationUid = String(
-  field(m, 'conversation_id', 'conversationId') ||
-  field(chat, 'conversation_id', 'conversationId') ||
-  ''
-);
-
-return `
-  <div class="message-item ${isMine ? 'mine' : ''}">
-    <div class="bubble ${isMine ? 'mine' : ''}">
-      ${esc(body)}
-    </div>
-
-    ${
-      isMine && messageUid && conversationUid
-        ? `<button
-             type="button"
-             class="recall-btn"
-             data-recall-message="${esc(messageUid)}"
-             data-recall-conversation="${esc(conversationUid)}"
-           >Thu hồi</button>`
-        : ''
-    }
-  </div>
-`;
-}).join(''):'<div class="empty">Chưa có tin nhắn.</div>'}</div><form id="sendForm" class="chat-compose"><input name="message" maxlength="4000" autocomplete="off" required placeholder="Nhập tin nhắn..."><button class="primary" type="submit">Gửi</button></form>`;// Khi mở hội thoại, tải lại hoặc gửi tin nhắn: luôn đến cuối cuộc trò chuyện.
-  view.scrollTop = view.scrollHeight;
-  requestAnimationFrame(() => {
-    if (state.conversation === chat && $('#messages')) {
-      view.scrollTop = view.scrollHeight;
-    }
-  });
-  $('#backChats').onclick=showChats;
-view.querySelectorAll('[data-recall-message]').forEach(button => {
-  button.onclick = async () => {
-    if (!confirm('Thu hồi tin nhắn này trên Locket?')) return;
-
-    button.disabled = true;
-    button.textContent = 'Đang thu hồi...';
-
-    try {
-      await api('/api/message/recall', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          conversationUid: button.dataset.recallConversation,
-          messageUid: button.dataset.recallMessage
-        })
-      });
-
-      toast('Đã gửi yêu cầu thu hồi.');
-      await showMessages(chat);
-    } catch (err) {
-      toast('Thu hồi thất bại: ' + err.message, true);
-      button.disabled = false;
-      button.textContent = 'Thu hồi';
-    }
+  const closeMenu=()=>{overlay.hidden=true;selected=null;clearTimeout(pressTimer);};
+  function showMenu(m,id,isMine){
+    selected={message:m,id,isMine};
+    $('#deleteForEveryone').hidden=!isMine||!id||!String(m.conversation_id||m.conversationId||chat.conversation_id||chat.conversationId||'');
+    overlay.hidden=false;
+  }
+  $('#cancelChatAction').onclick=closeMenu;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeMenu();});
+  $('#deleteForMe').onclick=async()=>{
+    if(!selected)return;
+    if(selected.id)hidden.add(selected.id);
+    else hidden.add('fallback:'+String(selected.message.timestamp||'')+':'+String(selected.message.text||''));
+    try{localStorage.setItem(localKey,JSON.stringify([...hidden].slice(-1500)));}catch{}
+    closeMenu();
+    lastSignature='';
+    await refreshMessages(true);
   };
-});
-$('#reloadMessages').onclick=()=>showMessages(chat);$('#sendForm').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;const btn=form.querySelector('button');btn.disabled=true;try{const text=form.elements.message.value.trim();if(!text)return;await api('/api/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:other,message:text})});toast('Đã gửi tin nhắn');await showMessages(chat)}catch(err){toast(err.message,true)}finally{btn.disabled=false}}}catch(e){empty(e.message);toast(e.message,true)}}
+  $('#deleteForEveryone').onclick=async()=>{
+    if(!selected||!selected.isMine)return;
+    const msgId=selected.id,convId=String(selected.message.conversation_id||selected.message.conversationId||chat.conversation_id||chat.conversationId||'');
+    if(!msgId||!convId)return toast('Không có ID để thu hồi.',true);
+    closeMenu();
+    try{
+      await api('/api/message/recall',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversationUid:convId,messageUid:msgId})});
+      toast('Đã gửi yêu cầu thu hồi với mọi người.');
+      lastSignature='';
+      await refreshMessages(true);
+    }catch(error){toast('Thu hồi thất bại: '+error.message,true);}
+  };
+  const chatIsActive=()=>alive && state.conversation===chat && state.tab==='chat' && root.isConnected;
+  function buildMessage(m,index){
+    const sender=String(deep(m,['sender_uid','senderUid','sender_id','senderId','from_uid','fromUid'])||'');
+    const isMine=Boolean(sender&&myUid&&sender===myUid);
+    const text=caption(m)||String(deep(m,['content','body'])||'Tin nhắn không có nội dung văn bản');
+    const id=String(field(m,'message_id','messageId')||'');
+    const fallback='fallback:'+String(m.timestamp||'')+':'+String(m.text||'');
+    if(hidden.has(id)||hidden.has(fallback))return null;
+    const el=document.createElement('div');
+    el.className='message-item'+(isMine?' mine':'');
+    const bubble=document.createElement('div');
+    bubble.className='bubble'+(isMine?' mine':'');
+    bubble.textContent=text;
+    bubble.setAttribute('role','button');
+    bubble.setAttribute('tabindex','0');
+    bubble.setAttribute('aria-label','Nhấn giữ để xem tùy chọn tin nhắn');
+    bubble.oncontextmenu=e=>{e.preventDefault();showMenu(m,id,isMine);};
+    bubble.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showMenu(m,id,isMine);}};
+    bubble.addEventListener('pointerdown',e=>{
+      if(e.pointerType==='mouse'&&e.button!==0)return;
+      pressStartX=e.clientX;pressStartY=e.clientY;
+      clearTimeout(pressTimer);
+      pressTimer=setTimeout(()=>{pressTimer=null;if(navigator.vibrate)navigator.vibrate(18);showMenu(m,id,isMine);},500);
+    });
+    bubble.addEventListener('pointermove',e=>{
+      if(Math.abs(e.clientX-pressStartX)>12||Math.abs(e.clientY-pressStartY)>12){clearTimeout(pressTimer);pressTimer=null;}
+    });
+    for(const type of ['pointerup','pointercancel','pointerleave'])bubble.addEventListener(type,()=>{clearTimeout(pressTimer);pressTimer=null;});
+    el.append(bubble);
+    return el;
+  }
+  async function refreshMessages(force=false){
+    if(!chatIsActive()||busy)return;
+    busy=true;
+    try{
+      const data=await api('/api/messages?uid='+encodeURIComponent(other));
+      if(!chatIsActive())return;
+      const messages=messageItems(data);
+      const signature=JSON.stringify(messages.map(m=>[m.message_id,m.timestamp,m.text,m.body,m.sender_uid]))+JSON.stringify([...hidden]);
+      if(force||signature!==lastSignature){
+        const nearBottom=view.scrollHeight-view.scrollTop-view.clientHeight<130;
+        const list=document.createDocumentFragment();
+        messages.forEach((m,i)=>{const row=buildMessage(m,i);if(row)list.append(row);});
+        root.replaceChildren(list);
+        if(!root.childNodes.length)root.innerHTML='<div class="empty">Chưa có tin nhắn.</div>';
+        lastSignature=signature;
+        if(firstLoad||nearBottom){requestAnimationFrame(()=>{if(chatIsActive())view.scrollTop=view.scrollHeight;});}
+      }
+      firstLoad=false;
+    }catch(err){if(firstLoad&&chatIsActive())root.textContent='Không tải được tin nhắn: '+err.message;}
+    finally{busy=false;}
+  }
+  async function getTyping(){
+    if(!chatIsActive()||document.hidden)return;
+    try{
+      const data=await api('/api/chat-typing?uid='+encodeURIComponent(other));
+      if(chatIsActive())$('#typingIndicator').hidden=!data.typing;
+    }catch{}
+  }
+  let timer=setInterval(()=>{
+    if(document.hidden||!chatIsActive())return;
+    refreshMessages();
+    getTyping();
+  },4500);
+  $('#backChats').onclick=()=>{closeLiveChat();showChats();};
+  $('#reloadMessages').onclick=()=>refreshMessages(true);
+  form.elements.message.addEventListener('input',()=>{
+    const now=Date.now();
+    if(now-typingAt<2400||typingBusy)return;
+    typingAt=now;typingBusy=true;
+    api('/api/chat-typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:other,typing:Boolean(form.elements.message.value.trim())})}).catch(()=>{}).finally(()=>{typingBusy=false;});
+  });
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const text=form.elements.message.value.trim();
+    if(!text)return;
+    const button=form.querySelector('button[type="submit"]');
+    button.disabled=true;
+    try{
+      await api('/api/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:other,message:text})});
+      form.elements.message.value='';
+      api('/api/chat-typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:other,typing:false})}).catch(()=>{});
+      await refreshMessages(true);
+    }catch(err){toast('Gửi thất bại: '+err.message,true);}
+    finally{button.disabled=false;}
+  };
+  await refreshMessages(true);
+  getTyping();
+}
 
 function chatAvatar(chat) {
   const id = chatPeer(chat);
