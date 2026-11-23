@@ -882,7 +882,7 @@ function chooseFile(file) {
       <form id="postForm" class="send-form">
         <div class="send-media">
           ${isVideo ? `<video src="${esc(state.mediaPreview)}" controls playsinline preload="metadata"></video>` : `<img src="${esc(state.mediaPreview)}" alt="Khoảnh khắc xem trước">`}
-          <input id="postCaption" name="caption" type="text" maxlength="250" placeholder="Nhập tin nhắn..." aria-label="Caption">
+          <div class="caption-fx-shell" id="captionFxShell"><div class="caption-fx-particles" id="captionFxParticles" aria-hidden="true"></div><input id="postCaption" name="caption" type="text" maxlength="250" placeholder="Nhập tin nhắn..." aria-label="Caption"></div>
         </div>
         <div class="send-media-info">${isVideo ? 'Video' : 'Ảnh'} · ${(file.size / 1024 / 1024).toFixed(2)} MB</div>
         <div class="studio-actions">
@@ -944,13 +944,42 @@ function chooseFile(file) {
     selectedBackgroundColors=preset.colors.slice();
     colorInput.value=selectedTextColor;
     backgroundInput.value=JSON.stringify(selectedBackgroundColors);
+    const shell=$('#captionFxShell');
     const captionInput=$('#postCaption');
     captionInput.style.color=selectedTextColor;
-    captionInput.style.background=selectedBackgroundColors.length
+    shell.style.background=selectedBackgroundColors.length
       ? 'linear-gradient(110deg,'+selectedBackgroundColors.join(',')+')'
       : 'rgba(30,34,40,.65)';
   }
+  function showCaptionEffect(label, style) {
+    const layer=$('#captionFxParticles');
+    const shell=$('#captionFxShell');
+    if(!layer || !shell)return;
+    const lower=String(label||'').toLowerCase();
+    const mode=/đông|giáng sinh/.test(lower)?'snow':
+      /thu/.test(lower)?'leaves':
+      /sinh nhật|dễ thương|nhớ ai/.test(lower)?'hearts':
+      /xuân|tri ân|bạn thân/.test(lower)?'petals':
+      /bình chọn|năm mới|hôm nay|năng lượng/.test(lower)?'sparkles':
+      /hè|đi chơi|cuối tuần/.test(lower)?'sunlight':
+      style==='purple'||style==='blue'?'sparkles':'none';
+    const symbols={snow:'❄',leaves:'✦',hearts:'♥',petals:'✿',sparkles:'✧',sunlight:'✴'};
+    shell.dataset.effect=mode;
+    layer.replaceChildren();
+    if(mode==='none')return;
+    for(let i=0;i<8;i++){
+      const particle=document.createElement('span');
+      particle.className='caption-fx-particle';
+      particle.textContent=symbols[mode];
+      particle.style.setProperty('--fx-left',(5+i*13)%100+'%');
+      particle.style.setProperty('--fx-delay',(-i*.53)+'s');
+      particle.style.setProperty('--fx-time',(2.8+(i%4)*.6)+'s');
+      particle.style.setProperty('--fx-size',(10+(i%3)*4)+'px');
+      layer.append(particle);
+    }
+  }
   applyPresetStyle('neutral');
+  showCaptionEffect('','neutral');
   $('#cancelMoment').onclick = $('#backToCamera').onclick;
   $('#openCustomize').onclick = () => { const sheet = $('#customizeSheet'); sheet.hidden = false; sheet.scrollTop = 0; };
   $('#closeCustomize').onclick = () => { $('#customizeSheet').hidden = true; };
@@ -960,6 +989,7 @@ function chooseFile(file) {
     const input = $('#postCaption');
     const action = button.dataset.customAction;
     applyPresetStyle(button.dataset.customStyle);
+    showCaptionEffect(button.textContent,button.dataset.customStyle);
     if (action === 'focus') {
       $('#customizeSheet').hidden = true;
       input.focus();
