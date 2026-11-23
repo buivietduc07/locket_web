@@ -842,21 +842,15 @@ app.post('/api/chat/photo',upload.single('photo'),wrap(async(req,res)=>{
   if(!Array.isArray(friends)||!friends.some(f=>String(f.uid||f.id||'')===other))
     return res.status(403).json({error:'Người nhận không thuộc danh sách bạn bè.'});
   const caption=String(req.body.caption||'').slice(0,250);
-  // Chia sẻ ảnh cho đúng người nhận, sau đó gửi moment_uid vào hội thoại Locket.
-  const moment=await client.moments.post({image:file.buffer,caption,isPrivate:false,recipients:[other]});
+  // Upload đúng một lần để giữ URL ảnh cho cả hai bản web.
+  // SDK nhận URL Firebase Storage trong post() và sẽ không tải lại tệp.
+  const photoUrl=await client.moments.uploadImage(file.buffer);
+  if(!String(photoUrl).startsWith('https://'))
+    return res.status(502).json({error:'Locket không trả đường dẫn ảnh hợp lệ.'});
+  const moment=await client.moments.post({image:photoUrl,caption,isPrivate:false,recipients:[other]});
   const id=String(moment?.canonical_uid||moment?.moment_uid||moment?.id||'');
   if(!/^[\w-]{1,128}$/.test(id))
     return res.status(502).json({error:'Ảnh đã đăng nhưng Locket không trả ID để gửi vào chat.'});
-  let photoUrl=String(moment?.thumbnail_url||moment?.image_url||'');
-  if(!photoUrl){
-    // Tác vụ post trả về ID nhưng thường không trả URL ảnh.
-    // Lấy lại qua bài vừa đăng trong history của tài khoản.
-    try{
-      const posts=await client.moments.getMoments({limit:10});
-      const found=posts?.moments?.find(m=>String(m.moment_uid||m.canonical_uid||m.id||'')===id);
-      photoUrl=String(found?.thumbnail_url||found?.image_url||'');
-    }catch{}
-  }
   try{
     await client.chat.sendMoment(other,id,caption||null);
   }catch(err){
