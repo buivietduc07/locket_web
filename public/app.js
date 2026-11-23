@@ -505,7 +505,7 @@ async function showMessages(chat){
   function buildMessage(m,index){
     const sender=String(deep(m,['sender_uid','senderUid','sender_id','senderId','from_uid','fromUid'])||'');
     const isMine=Boolean(sender&&myUid&&sender===myUid);
-    const text=caption(m)||String(deep(m,['content','body'])||'Tin nhắn không có nội dung văn bản');
+    const text=String(caption(m)||deep(m,['content','body'])||'');
     const id=String(field(m,'message_id','messageId')||'');
     const fallback='fallback:'+String(m.timestamp||'')+':'+String(m.text||'');
     if(hidden.has(id)||hidden.has(fallback))return null;
@@ -530,7 +530,7 @@ async function showMessages(chat){
     }else if(m.moment_uid) {
       bubble.textContent='Ảnh Locket đã được chia sẻ';
     } else {
-      if(!text.trim() || /^[\\u200b\\u200c\\u200d\\ufeff\s]*$/.test(text))return null;
+      if(!text.trim() || /^[\u200b\u200c\u200d\ufeff\s]*$/.test(text))return null;
       bubble.textContent=text;
     }
     bubble.setAttribute('role','button');
