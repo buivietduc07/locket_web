@@ -829,6 +829,22 @@ async function loadRecipients() {
   }
 }
 
+
+const STUDIO_GROUPS = [
+  {title:'Tùy chỉnh',items:[['Văn bản','','neutral','focus'],['Thời gian','','neutral','time'],['Vị trí','','neutral','location'],['Chuỗi','Chuỗi hôm nay','amber'],['Bình chọn','Bình chọn: Có hay không?','purple'],['Review','Đánh giá hôm nay: ','neutral'],['Âm nhạc','Bài hát đang nghe: ','neutral']]},
+  {title:'Theo mùa',items:[['Chào mùa đông','Chào mùa đông!','ice'],['Chào mùa thu','Một ngày mùa thu thật đẹp.','sunset'],['Chào mùa hè','Nắng vàng và những kỷ niệm.','amber'],['Chào mùa xuân','Một khởi đầu mới thật vui.','mint']]},
+  {title:'Ngày đặc biệt',items:[['Giáng sinh','Giáng sinh an lành!','green'],['Năm mới','Chúc mừng năm mới!','red'],['Sinh nhật','Chúc mừng sinh nhật!','pink'],['Tri ân thầy cô','Cảm ơn những người thầy cô!','mint']]},
+  {title:'Caption gợi ý',items:[['Hôm nay','Hôm nay có một chút đáng yêu.','purple'],['Đi chơi','Một chuyến đi thật vui!','sunset'],['Đói rồi','Ăn gì bây giờ?','amber'],['Chill','Một chút bình yên.','mint'],['Nhớ ai đó','Có ai đang nhớ mình không?','ice'],['Bạn thân','Có bạn là có niềm vui.','pink'],['Khoảnh khắc','Giữ lại khoảnh khắc này.','blue'],['Cuối tuần','Cuối tuần nhẹ nhàng.','green']]},
+  {title:'Trang trí caption',items:[['Tối giản','Một ngày thật đẹp.','neutral'],['Dễ thương','Đáng yêu quá đi!','pink'],['Năng lượng','Hôm nay thật rực rỡ!','sunset'],['Hoài niệm','Một ngày để nhớ.','ice'],['Tâm trạng','Có đôi điều muốn nói...','purple']]}
+];
+function studioMarkup() {
+  return '<div id="customizeSheet" class="customize-sheet" hidden>'+
+    '<div class="customize-top"><strong>CUSTOMIZE STUDIO</strong><button type="button" id="closeCustomize" aria-label="Đóng">×</button></div>'+
+    '<p class="customize-hint">Các mẫu sẽ điền caption vào khoảnh khắc. Màu nút chỉ dùng để phân biệt mẫu, không làm đổi màu chữ trên bài Locket.</p>'+
+    STUDIO_GROUPS.map(group=>'<section class="customize-group"><h3>'+esc(group.title)+'</h3><div class="customize-chips">'+
+    group.items.map(item=>'<button type="button" class="customize-chip '+esc(item[2])+'" data-custom-text="'+esc(item[1])+'" data-custom-action="'+esc(item[3]||'text')+'">'+esc(item[0])+'</button>').join('')+
+    '</div></section>').join('')+'</div>';
+}
 function chooseFile(file) {
   if (!file) return;
   if (state.mediaPreview) URL.revokeObjectURL(state.mediaPreview);
@@ -843,7 +859,7 @@ function chooseFile(file) {
   selectedRecipients.clear();
   const isVideo = file.type.startsWith('video/');
   view.innerHTML = `
-    <div class="locket-send-screen">
+    <div class="locket-send-screen send-studio">
       <div class="send-top"><button id="backToCamera" class="send-back" type="button">Quay lại</button><strong>Gửi đến...</strong><button id="downloadMoment" class="send-download" type="button">Lưu</button></div>
       <h2 class="send-heading">LOCKET CAMERA</h2>
       <form id="postForm" class="send-form">
@@ -852,7 +868,15 @@ function chooseFile(file) {
           <input id="postCaption" name="caption" type="text" maxlength="250" placeholder="Nhập tin nhắn..." aria-label="Caption">
         </div>
         <div class="send-media-info">${isVideo ? 'Video' : 'Ảnh'} · ${(file.size / 1024 / 1024).toFixed(2)} MB</div>
-        <button id="sendMoment" class="send-submit" type="submit">Gửi đến tất cả</button>
+        <div class="studio-actions">
+          <button id="cancelMoment" class="studio-action" type="button" aria-label="Hủy">×</button>
+          <button id="sendMoment" class="studio-action studio-send" type="submit" aria-label="Gửi đến tất cả">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 3-7.4 18-3.1-7.5L3 10.4 21 3Z"/><path d="m10.5 13.5 10.3-10.3"/></svg>
+          </button>
+          <button id="openCustomize" class="studio-action" type="button" aria-label="Tùy chỉnh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.8 5.3L19 10l-5.2 1.7L12 17l-1.8-5.3L5 10l5.2-1.7L12 3Z"/><path d="M19 16v5m-2.5-2.5h5M4 15v4m-2-2h4"/></svg>
+          </button>
+        </div>
         <div class="recipient-caption" id="recipientCaption">Chọn người nhận</div>
         <div class="recipient-strip" id="recipientStrip" aria-label="Người nhận">
           <button type="button" class="recipient-choice" data-mode="private"><span class="recipient-avatar">Tôi</span><span class="recipient-name">Riêng tư</span></button>
@@ -860,6 +884,7 @@ function chooseFile(file) {
           <span id="recipientLoading" class="recipient-loading">Đang tải bạn bè...</span>
         </div>
       </form>
+      ${studioMarkup()}
     </div>`;
 
   $('#backToCamera').onclick = () => {
@@ -875,6 +900,41 @@ function chooseFile(file) {
     a.click();
   };
   $('#postForm').onsubmit = postMedia;
+  $('#cancelMoment').onclick = $('#backToCamera').onclick;
+  $('#openCustomize').onclick = () => { $('#customizeSheet').hidden = false; };
+  $('#closeCustomize').onclick = () => { $('#customizeSheet').hidden = true; };
+  $('#customizeSheet').addEventListener('click', event => {
+    const button = event.target.closest('[data-custom-action]');
+    if (!button) return;
+    const input = $('#postCaption');
+    const action = button.dataset.customAction;
+    if (action === 'focus') {
+      $('#customizeSheet').hidden = true;
+      input.focus();
+      return;
+    }
+    if (action === 'time') {
+      input.value = 'Bây giờ là ' + new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+    } else if (action === 'location') {
+      if (!navigator.geolocation) { toast('Trình duyệt không hỗ trợ vị trí.',true); return; }
+      button.disabled = true;
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          input.value = ('Vị trí: ' + position.coords.latitude.toFixed(4)+', '+position.coords.longitude.toFixed(4)).slice(0,250);
+          button.disabled = false;
+          if ($('#customizeSheet')) $('#customizeSheet').hidden = true;
+        },
+        () => { button.disabled = false; toast('Không lấy được vị trí hoặc chưa cấp quyền.',true); },
+        {enableHighAccuracy:false, timeout:8000, maximumAge:60000}
+      );
+      return;
+    } else {
+      input.value = button.dataset.customText || '';
+    }
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    $('#customizeSheet').hidden = true;
+  });
+
   const strip = $('#recipientStrip');
   function updateRecipientUi() {
     strip.querySelectorAll('[data-mode]').forEach(button => {
@@ -884,9 +944,9 @@ function chooseFile(file) {
       button.classList.toggle('selected', selectedRecipients.has(button.dataset.recipient));
     });
     const btn = $('#sendMoment');
-    btn.textContent = recipientMode === 'private' ? 'Đăng riêng tư' :
+    btn.setAttribute('aria-label', recipientMode === 'private' ? 'Đăng riêng tư' :
       recipientMode === 'all' ? 'Gửi đến tất cả' :
-      `Gửi đến ${selectedRecipients.size} bạn bè`;
+      `Gửi đến ${selectedRecipients.size} bạn bè`);
     $('#recipientCaption').textContent = recipientMode === 'private'
       ? 'Chỉ mình bạn xem được khoảnh khắc này'
       : recipientMode === 'all'
