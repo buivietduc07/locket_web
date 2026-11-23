@@ -1014,3 +1014,18 @@ button:disabled {
 .recall-btn:disabled {
   opacity: 0.5;
 }
+.forgot-password-btn {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: #574b29;
+  text-align: center;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#forgotPasswordForm { display: grid; gap: 14px; margin-top: 16px; }
+#forgotPasswordForm[hidden] { display: none; }
