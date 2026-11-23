@@ -1120,3 +1120,21 @@ button:disabled {
 }
 @media(max-width:550px){.send-studio .caption-fx-shell{bottom:18px}}
 @media(prefers-reduced-motion:reduce){.caption-fx-particle{animation:none;opacity:.3;top:15px}}
+
+
+/* Live chat, long-press actions and typing indicator */
+.messages .bubble{cursor:context-menu;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.typing-indicator{margin:8px 0 12px;color:#666;font-size:13px}
+.typing-dots{display:inline-flex;gap:3px;vertical-align:middle}
+.typing-dots i{width:5px;height:5px;border-radius:50%;background:#8b83ae;animation:typing-dot 1s ease-in-out infinite}
+.typing-dots i:nth-child(2){animation-delay:.18s}
+.typing-dots i:nth-child(3){animation-delay:.36s}
+@keyframes typing-dot{0%,65%,100%{opacity:.3;transform:translateY(0)}35%{opacity:1;transform:translateY(-4px)}}
+.chat-action-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-end;justify-content:center;background:#0005;padding:16px}
+.chat-action-overlay[hidden]{display:none!important}
+.chat-action-menu{width:min(100%,430px);background:#fff;border-radius:22px;padding:16px;box-shadow:0 12px 38px #0003;display:grid;gap:9px}
+.chat-action-title{font-weight:800;text-align:center;padding:5px 0 12px;color:#333}
+.chat-action-menu button{padding:13px;border:0;border-radius:12px;background:#f3f1ee;color:#222;font-weight:700}
+.chat-action-menu #deleteForEveryone{background:#fce9e9;color:#b82028}
+.chat-action-menu button[hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){.typing-dots i{animation:none}}
