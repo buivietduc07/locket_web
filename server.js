@@ -786,13 +786,87 @@ app.get('/api/chat-typing',wrap(async(req,res)=>{
 }));
 
 app.get('/api/messages',wrap(async(req,res)=>{
+  const other=String(req.query.uid||'').trim();
+  if(!/^[\w-]{1,128}$/.test(other))return res.status(400).json({error:'UID không hợp lệ.'});
+  const client=res.locals.client;
+  const messages=await client.chat.getMessages({otherUserId:other});
+  // SDK không đọc moment_uid trong Firestore chat, nên bổ sung trường đó.
+  const conversations=await client.chat.getConversations();
+  const conversation=conversations.find(c=>String(c.peer_uid||'')===other);
+  if(conversation && Array.isArray(messages)){
+    try{
+      const token=await client.session.getValidToken();
+      const url='https://firestore.googleapis.com/v1/projects/locket-4252a/databases/(default)/documents/conversations/'+encodeURIComponent(conversation.conversation_id)+'/messages?pageSize=100';
+      const response=await fetch(url,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+      if(response.ok){
+        const payload=await response.json();
+        const extra=new Map();
+        for(const doc of payload.documents||[]){
+          const f=doc.fields||{};
+          const id=doc.name.split('/').pop();
+          const moment=String(f.moment_uid?.stringValue||f.moment?.stringValue||f.moment_id?.stringValue||'');
+          if(moment)extra.set(id,moment);
+        }
+        const momentIds=[...new Set(extra.values())].slice(0,100);
+        let maps=new Map();
+        if(momentIds.length){
+          const values=await redis('MGET',...momentIds.map(id=>'locket:chat:photo:'+id));
+          if(Array.isArray(values)){
+            momentIds.forEach((id,i)=>{if(values[i]){try{maps.set(id,JSON.parse(values[i]));}catch{}}});
+          }
+        }
+        for(const msg of messages){
+          const mid=extra.get(String(msg.message_id||''));
+          if(!mid)continue;
+          msg.moment_uid=mid;
+          const image=maps.get(mid);
+          if(image&&image.sender===other||image&&image.recipient===other&&image.sender===client.session.uid){
+            msg.image_url=image.url;
+            msg.image_caption=image.caption||'';
+          }
+        }
+      }
+    }catch(err){console.warn('[Chat photo] Không tải được metadata ảnh:',err.message);}
+  }
+  res.json(clean(messages));
+}));
 
-  const uid=String(req.query.uid||'').trim();
-
-  if(!/^[\w-]{1,128}$/.test(uid)) return res.status(400).json({error:'UID không hợp lệ.'});
-
-  res.json(clean(await res.locals.client.chat.getMessages({otherUserId:uid})));
-
+app.post('/api/chat/photo',upload.single('photo'),wrap(async(req,res)=>{
+  const other=String(req.body.uid||'').trim();
+  const file=req.file;
+  if(!/^[\w-]{1,128}$/.test(other))return res.status(400).json({error:'Người nhận không hợp lệ.'});
+  if(!file||!mediaTypes.image.has(file.mimetype)||file.size>12*1024*1024)
+    return res.status(400).json({error:'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP tối đa 12 MB.'});
+  const client=res.locals.client;
+  const friends=await client.friends.getAllFriends();
+  if(!Array.isArray(friends)||!friends.some(f=>String(f.uid||f.id||'')===other))
+    return res.status(403).json({error:'Người nhận không thuộc danh sách bạn bè.'});
+  const caption=String(req.body.caption||'').slice(0,250);
+  // Chia sẻ ảnh cho đúng người nhận, sau đó gửi moment_uid vào hội thoại Locket.
+  const moment=await client.moments.post({image:file.buffer,caption,isPrivate:false,recipients:[other]});
+  const id=String(moment?.canonical_uid||moment?.moment_uid||moment?.id||'');
+  if(!/^[\w-]{1,128}$/.test(id))
+    return res.status(502).json({error:'Ảnh đã đăng nhưng Locket không trả ID để gửi vào chat.'});
+  let photoUrl=String(moment?.thumbnail_url||moment?.image_url||'');
+  if(!photoUrl){
+    // Tác vụ post trả về ID nhưng thường không trả URL ảnh.
+    // Lấy lại qua bài vừa đăng trong history của tài khoản.
+    try{
+      const posts=await client.moments.getMoments({limit:10});
+      const found=posts?.moments?.find(m=>String(m.moment_uid||m.canonical_uid||m.id||'')===id);
+      photoUrl=String(found?.thumbnail_url||found?.image_url||'');
+    }catch{}
+  }
+  try{
+    await client.chat.sendMoment(other,id,caption||null);
+  }catch(err){
+    return res.status(502).json({error:'Ảnh đã đăng lên Locket nhưng không gửi được vào hội thoại: '+err.message});
+  }
+  if(photoUrl.startsWith('https://')){
+    await redis('SET','locket:chat:photo:'+id,JSON.stringify({url:photoUrl,sender:client.session.uid,recipient:other,caption}),'EX',2592000)
+      .catch(err=>console.warn('[Chat photo] Không lưu được preview:',err.message));
+  }
+  res.json({ok:true,moment_uid:id,image_url:photoUrl||null});
 }));
 
 app.post('/api/message/recall', wrap(async (req, res) => {
