@@ -867,6 +867,12 @@ app.post('/api/post',upload.single('media'),wrap(async(req,res)=>{
   const textColor=String(req.body.textColor||'#FFFFFF').trim();
   if(!/^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/.test(textColor))
     return res.status(400).json({error:'Màu chữ không hợp lệ.'});
+  let captionColors;
+  try { captionColors=JSON.parse(req.body.captionColors||'[]'); }
+  catch { return res.status(400).json({error:'Màu nền caption không hợp lệ.'}); }
+  if(!Array.isArray(captionColors)||captionColors.length>2||
+     captionColors.some(color=>typeof color!=='string'||!/^#[0-9a-fA-F]{6}$/.test(color)))
+    return res.status(400).json({error:'Màu nền caption không hợp lệ.'});
 
   const visibility=String(req.body.visibility||'all');
 
@@ -896,7 +902,7 @@ app.post('/api/post',upload.single('media'),wrap(async(req,res)=>{
 
   }
 
-  const params={caption,textColor,isPrivate:visibility==='private',recipients};
+  const params={caption,textColor,colors:captionColors,isPrivate:visibility==='private',recipients};
 
   params[kind]=file.buffer;
 
