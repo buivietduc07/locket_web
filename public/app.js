@@ -832,31 +832,32 @@ async function loadRecipients() {
 
 const STUDIO_GROUPS = [
   {title:'Tùy chỉnh',items:[['Văn bản','','neutral','focus'],['Thời gian','','neutral','time'],['Vị trí','','neutral','location'],['Chuỗi','Chuỗi hôm nay','amber'],['Bình chọn','Bình chọn: Có hay không?','purple'],['Review','Đánh giá hôm nay: ','neutral'],['Âm nhạc','Bài hát đang nghe: ','neutral']]},
-  {title:'Theo mùa',items:[['Chào mùa đông','Chào mùa đông!','ice'],['Chào mùa thu','Một ngày mùa thu thật đẹp.','sunset'],['Chào mùa hè','Nắng vàng và những kỷ niệm.','amber'],['Chào mùa xuân','Một khởi đầu mới thật vui.','mint']]},
-  {title:'Ngày đặc biệt',items:[['Giáng sinh','Giáng sinh an lành!','green'],['Năm mới','Chúc mừng năm mới!','red'],['Sinh nhật','Chúc mừng sinh nhật!','pink'],['Tri ân thầy cô','Cảm ơn những người thầy cô!','mint']]},
+  {title:'Theo mùa',items:[['Chào mùa đông','Chào mùa đông','ice'],['Chào mùa thu','Chào mùa thu','sunset'],['Chào mùa hè','Chào mùa hè','amber'],['Chào mùa xuân','Chào mùa xuân','mint']]},
+  {title:'Ngày đặc biệt',items:[['Giáng sinh','Giáng sinh an lành','green'],['Năm mới','Chúc mừng năm mới','red'],['Sinh nhật','Chúc mừng sinh nhật','pink'],['Tri ân thầy cô','Tri ân thầy cô','mint']]},
   {title:'Caption gợi ý',items:[['Hôm nay','Hôm nay có một chút đáng yêu.','purple'],['Đi chơi','Một chuyến đi thật vui!','sunset'],['Đói rồi','Ăn gì bây giờ?','amber'],['Chill','Một chút bình yên.','mint'],['Nhớ ai đó','Có ai đang nhớ mình không?','ice'],['Bạn thân','Có bạn là có niềm vui.','pink'],['Khoảnh khắc','Giữ lại khoảnh khắc này.','blue'],['Cuối tuần','Cuối tuần nhẹ nhàng.','green']]},
   {title:'Trang trí caption',items:[['Tối giản','Một ngày thật đẹp.','neutral'],['Dễ thương','Đáng yêu quá đi!','pink'],['Năng lượng','Hôm nay thật rực rỡ!','sunset'],['Hoài niệm','Một ngày để nhớ.','ice'],['Tâm trạng','Có đôi điều muốn nói...','purple']]}
 ];
 
-const STUDIO_TEXT_COLORS = [
-  ['Trắng','#FFFFFF'],['Đen','#111111'],['Đỏ','#FF365B'],['Hồng','#FF65B5'],
-  ['Cam','#FF9D42'],['Vàng','#FFD346'],['Xanh lá','#38E58B'],['Xanh dương','#39AAFF'],
-  ['Tím','#A98AFF'],['Xanh ngọc','#35E0DB']
-];
-const STUDIO_PRESET_COLORS = {
-  neutral:'#FFFFFF',amber:'#FFD346',purple:'#A98AFF',ice:'#39AAFF',
-  sunset:'#FF9D42',mint:'#38E58B',green:'#38E58B',red:'#FF365B',
-  pink:'#FF65B5',blue:'#39AAFF'
+// Mỗi mẫu có màu nền và màu chữ cố định, gửi qua overlay Locket.
+const STUDIO_PRESET_STYLE = {
+  neutral:{colors:[],textColor:'#FFFFFF'},
+  amber:{colors:['#F7C844','#E9AC1C'],textColor:'#24201A'},
+  purple:{colors:['#7948EE','#5944DF'],textColor:'#FFFFFF'},
+  ice:{colors:['#C5F3FF','#81D3ED'],textColor:'#174052'},
+  sunset:{colors:['#FFB363','#F08B3A'],textColor:'#26211C'},
+  mint:{colors:['#58EFC0','#2CCBC6'],textColor:'#143D37'},
+  green:{colors:['#36B971','#197B52'],textColor:'#FFFFFF'},
+  red:{colors:['#EF5151','#BA2F36'],textColor:'#FFFFFF'},
+  pink:{colors:['#FFA5CC','#F6BED3'],textColor:'#38202D'},
+  blue:{colors:['#239EFB','#356EE7'],textColor:'#FFFFFF'}
 };
 function studioMarkup() {
   return '<div id="customizeSheet" class="customize-sheet" hidden>'+
     '<div class="customize-top"><strong>CUSTOMIZE STUDIO</strong><button type="button" id="closeCustomize" aria-label="Đóng">×</button></div>'+
-    '<p class="customize-hint">Chọn màu chữ và caption. Màu chữ được gửi trực tiếp vào overlay của bài Locket.</p>'+
-    '<section class="customize-group"><h3>Màu chữ</h3><div class="studio-color-row">'+
-    STUDIO_TEXT_COLORS.map((entry,i)=>'<button type="button" class="studio-color-choice'+(i===0?' selected':'')+'" data-text-color="'+esc(entry[1])+'" aria-label="'+esc(entry[0])+'" title="'+esc(entry[0])+'" style="--chip-color:'+esc(entry[1])+'"></button>').join('')+
-    '</div></section>'+
+    '<p class="customize-hint">Chọn mẫu nào dùng đúng màu nền và chữ của mẫu đó. Không cần chọn màu riêng.</p>'+
+
     STUDIO_GROUPS.map(group=>'<section class="customize-group"><h3>'+esc(group.title)+'</h3><div class="customize-chips">'+
-    group.items.map(item=>'<button type="button" class="customize-chip '+esc(item[2])+'" data-custom-text="'+esc(item[1])+'" data-custom-action="'+esc(item[3]||'text')+'">'+esc(item[0])+'</button>').join('')+
+    group.items.map(item=>'<button type="button" class="customize-chip '+esc(item[2])+'" data-custom-style="'+esc(item[2])+'" data-custom-text="'+esc(item[3] ? item[1] : item[0])+'" data-custom-action="'+esc(item[3]||'text')+'">'+esc(item[0])+'</button>').join('')+
     '</div></section>').join('')+'</div>';
 }
 function chooseFile(file) {
@@ -872,6 +873,7 @@ function chooseFile(file) {
   recipientMode = 'all';
   selectedRecipients.clear();
   let selectedTextColor = '#FFFFFF';
+  let selectedBackgroundColors = [];
   const isVideo = file.type.startsWith('video/');
   view.innerHTML = `
     <div class="locket-send-screen send-studio">
@@ -880,7 +882,7 @@ function chooseFile(file) {
       <form id="postForm" class="send-form">
         <div class="send-media">
           ${isVideo ? `<video src="${esc(state.mediaPreview)}" controls playsinline preload="metadata"></video>` : `<img src="${esc(state.mediaPreview)}" alt="Khoảnh khắc xem trước">`}
-          <input id="postCaption" name="caption" type="text" maxlength="250" placeholder="Nhập tin nhắn..." aria-label="Caption" style="color:#FFFFFF">
+          <input id="postCaption" name="caption" type="text" maxlength="250" placeholder="Nhập tin nhắn..." aria-label="Caption">
         </div>
         <div class="send-media-info">${isVideo ? 'Video' : 'Ảnh'} · ${(file.size / 1024 / 1024).toFixed(2)} MB</div>
         <div class="studio-actions">
@@ -916,23 +918,26 @@ function chooseFile(file) {
   };
   $('#postForm').onsubmit = postMedia;
   const colorInput = document.createElement('input');
-  colorInput.type = 'hidden';
-  colorInput.name = 'textColor';
-  colorInput.value = selectedTextColor;
+  colorInput.type='hidden';
+  colorInput.name='textColor';
   $('#postForm').appendChild(colorInput);
-  const applyTextColor = color => {
-    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) return;
-    selectedTextColor = color.toUpperCase();
-    colorInput.value = selectedTextColor;
-    $('#postCaption').style.color = selectedTextColor;
-    $('#customizeSheet').querySelectorAll('[data-text-color]').forEach(button => {
-      button.classList.toggle('selected',button.dataset.textColor.toUpperCase() === selectedTextColor);
-    });
-  };
-  $('#customizeSheet').addEventListener('click', event => {
-    const button = event.target.closest('[data-text-color]');
-    if (button) applyTextColor(button.dataset.textColor);
-  });
+  const backgroundInput = document.createElement('input');
+  backgroundInput.type='hidden';
+  backgroundInput.name='captionColors';
+  $('#postForm').appendChild(backgroundInput);
+  function applyPresetStyle(name) {
+    const preset=STUDIO_PRESET_STYLE[name] || STUDIO_PRESET_STYLE.neutral;
+    selectedTextColor=preset.textColor;
+    selectedBackgroundColors=preset.colors.slice();
+    colorInput.value=selectedTextColor;
+    backgroundInput.value=JSON.stringify(selectedBackgroundColors);
+    const captionInput=$('#postCaption');
+    captionInput.style.color=selectedTextColor;
+    captionInput.style.background=selectedBackgroundColors.length
+      ? 'linear-gradient(110deg,'+selectedBackgroundColors.join(',')+')'
+      : 'rgba(30,34,40,.65)';
+  }
+  applyPresetStyle('neutral');
   $('#cancelMoment').onclick = $('#backToCamera').onclick;
   $('#openCustomize').onclick = () => { $('#customizeSheet').hidden = false; };
   $('#closeCustomize').onclick = () => { $('#customizeSheet').hidden = true; };
@@ -941,8 +946,7 @@ function chooseFile(file) {
     if (!button) return;
     const input = $('#postCaption');
     const action = button.dataset.customAction;
-    const presetStyle = [...button.classList].find(name => Object.prototype.hasOwnProperty.call(STUDIO_PRESET_COLORS,name));
-    if(presetStyle) applyTextColor(STUDIO_PRESET_COLORS[presetStyle]);
+    applyPresetStyle(button.dataset.customStyle);
     if (action === 'focus') {
       $('#customizeSheet').hidden = true;
       input.focus();
@@ -1050,6 +1054,7 @@ async function postMedia(event) {
   data.append('media', file, file.name);
   data.append('caption', form.elements.caption.value);
   data.append('textColor', form.elements.textColor?.value || '#FFFFFF');
+  data.append('captionColors', form.elements.captionColors?.value || '[]');
   data.append('visibility', recipientMode);
   if (recipientMode === 'selected') {
     data.append('recipients', JSON.stringify([...selectedRecipients]));
