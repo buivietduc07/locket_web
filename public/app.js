@@ -903,6 +903,19 @@ function chooseFile(file) {
       </form>
       ${studioMarkup()}
     </div>`;
+  // Mỗi lần chụp/chọn media, bỏ vị trí cuộn cũ của màn Camera.
+  // Canh giữa vùng ảnh trong khung nhìn và giữ tiêu đề khi đủ chỗ.
+  view.scrollTop = 0;
+  const centerPhotoPreview = () => {
+    const preview = view.querySelector('.send-media');
+    if (!preview || !preview.isConnected) return;
+    const available = view.clientHeight;
+    const previewTop = preview.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
+    const ideal = previewTop + preview.offsetHeight / 2 - available / 2;
+    const maxScroll = Math.max(0, view.scrollHeight - available);
+    view.scrollTop = Math.max(0, Math.min(maxScroll, ideal));
+  };
+  requestAnimationFrame(centerPhotoPreview);
 
   $('#backToCamera').onclick = () => {
     state.file = null;
