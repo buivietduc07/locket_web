@@ -529,7 +529,10 @@ async function showMessages(chat){
       }
     }else if(m.moment_uid) {
       bubble.textContent='Ảnh Locket đã được chia sẻ';
-    } else bubble.textContent=text;
+    } else {
+      if(!text.trim() || /^[\\u200b\\u200c\\u200d\\ufeff\s]*$/.test(text))return null;
+      bubble.textContent=text;
+    }
     bubble.setAttribute('role','button');
     bubble.setAttribute('tabindex','0');
     bubble.setAttribute('aria-label','Nhấn giữ để xem tùy chọn tin nhắn');
@@ -589,6 +592,25 @@ async function showMessages(chat){
     typingAt=now;typingBusy=true;
     api('/api/chat-typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:other,typing:Boolean(form.elements.message.value.trim())})}).catch(()=>{}).finally(()=>{typingBusy=false;});
   });
+  async function optimizeChatPhoto(file){
+    // Giữ nguyên ảnh nhỏ; nén ảnh lớn ngay trên máy để giảm thời gian tải lên.
+    if(file.size<450*1024)return file;
+    try{
+      const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
+      const maxSide=1280;
+      const ratio=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(bitmap.width*ratio));
+      canvas.height=Math.max(1,Math.round(bitmap.height*ratio));
+      const ctx=canvas.getContext('2d');
+      if(!ctx){bitmap.close();return file;}
+      ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+      bitmap.close();
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.79));
+      if(!blob||blob.size>=file.size)return file;
+      return new File([blob],(file.name||'locket-photo').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg'});
+    }catch{return file;}
+  }
   $('#chatPhotoInput').onchange=async event=>{
     const file=event.target.files?.[0];
     if(!file)return;
@@ -600,9 +622,10 @@ async function showMessages(chat){
     const button=form.querySelector('.chat-photo-select');
     button.classList.add('sending');
     try{
+      const reduced=await optimizeChatPhoto(file);
       const data=new FormData();
       data.append('uid',other);
-      data.append('photo',file,file.name);
+      data.append('photo',reduced,reduced.name);
       const text=form.elements.message.value.trim();
       if(text)data.append('caption',text.slice(0,250));
       await api('/api/chat/photo',{method:'POST',body:data});
