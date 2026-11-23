@@ -854,7 +854,7 @@ const STUDIO_PRESET_STYLE = {
 function studioMarkup() {
   return '<div id="customizeSheet" class="customize-sheet" hidden>'+
     '<div class="customize-top"><strong>CUSTOMIZE STUDIO</strong><button type="button" id="closeCustomize" aria-label="Đóng">×</button></div>'+
-    '<p class="customize-hint">Chọn mẫu nào dùng đúng màu nền và chữ của mẫu đó. Không cần chọn màu riêng.</p>'+
+    //'<p class="customize-hint">Chọn mẫu nào dùng đúng màu nền và chữ của mẫu đó. Không cần chọn màu riêng.</p>'+
 
     STUDIO_GROUPS.map(group=>'<section class="customize-group"><h3>'+esc(group.title)+'</h3><div class="customize-chips">'+
     group.items.map(item=>'<button type="button" class="customize-chip '+esc(item[2])+'" data-custom-style="'+esc(item[2])+'" data-custom-text="'+esc(item[3] ? item[1] : item[0])+'" data-custom-action="'+esc(item[3]||'text')+'">'+esc(item[0])+'</button>').join('')+
