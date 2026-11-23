@@ -972,6 +972,32 @@ async function postMedia(event) {
 }
 
 async function init(){try{const res=await fetch('/api/bootstrap');const data=await res.json();$('#login').hidden=!!data.loggedIn;$('#app').hidden=!data.loggedIn;if(data.loggedIn){try{state.profile=await api('/api/profile');$('#accountLabel').textContent=username(state.profile)?'@'+username(state.profile):displayName(state.profile)}catch{}await openTab('camera')}}catch(err){toast('Không kết nối được server: '+err.message,true)}}
+$('#forgotPasswordBtn').onclick=()=>{
+  $('#loginForm').hidden=true;
+  $('#forgotPasswordBtn').hidden=true;
+  $('#forgotPasswordForm').hidden=false;
+  $('#forgotPasswordForm').elements.email.value=$('#loginForm').elements.email.value||'';
+};
+$('#backToLogin').onclick=()=>{
+  $('#forgotPasswordForm').hidden=true;
+  $('#loginForm').hidden=false;
+  $('#forgotPasswordBtn').hidden=false;
+};
+$('#forgotPasswordForm').onsubmit=async e=>{
+  e.preventDefault();
+  const form=e.currentTarget;
+  const btn=form.querySelector('button[type="submit"]');
+  btn.disabled=true;
+  try{
+    const data=await api('/api/forgot-password',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:form.elements.email.value.trim()})
+    });
+    toast(data.message||'Đã tiếp nhận yêu cầu.');
+  }catch(err){toast('Không gửi được yêu cầu: '+err.message,true);}
+  finally{btn.disabled=false;}
+};
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const btn=e.currentTarget.querySelector('button');btn.disabled=true;try{const d=new FormData(e.currentTarget);await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:d.get('email'),password:d.get('password')})});await init();toast('Đăng nhập thành công')}catch(err){toast(err.message,true)}finally{btn.disabled=false}};
 document.querySelectorAll('.nav button').forEach(btn=>btn.onclick=()=>openTab(btn.dataset.tab));
 $('#reloadBtn').onclick=refresh;
