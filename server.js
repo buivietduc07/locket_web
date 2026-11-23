@@ -246,24 +246,35 @@ app.post('/api/forgot-password', wrap(async (req,res) => {
   if(allowed!=='OK')return res.json({ok:true,message:generic});
 
   const resetUrl='https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key='+
-    encodeURIComponent(res.locals.resetKey||require('locket.js/lib/session').SessionManager.FIREBASE_API_KEY);
+    encodeURIComponent(require('locket.js/lib/session').SessionManager.FIREBASE_API_KEY);
+
+  let response;
   try {
-    const response=await fetch(resetUrl,{
+    response=await fetch(resetUrl,{
       method:'POST',
       headers:{'Content-Type':'application/json','X-Firebase-Locale':'vi'},
       body:JSON.stringify({requestType:'PASSWORD_RESET',email}),
       signal:AbortSignal.timeout(10000)
     });
-    if(!response.ok){
-      // Không tiết lộ email có đăng ký Locket hay không.
-      const result=await response.json().catch(()=>({}));
-      const code=String(result?.error?.message||'UNKNOWN');
-      console.warn('[Password reset] Firebase rejected:',code.replace(/[A-Za-z0-9_-]{32,}/g,'[redacted]'));
-    }
   }catch(err){
-    console.warn('[Password reset] Firebase unavailable:',err.message);
+    await redis('DEL',emailKey).catch(()=>{});
+    console.warn('[Password reset] Firebase request failed:',err.name);
+    return res.status(502).json({error:'Không kết nối được dịch vụ gửi email đặt lại mật khẩu. Vui lòng thử lại sau.'});
   }
-  res.json({ok:true,message:generic});
+  if(!response.ok){
+    const result=await response.json().catch(()=>({}));
+    const code=String(result?.error?.message||'UNKNOWN').split(' : ')[0];
+    console.warn('[Password reset] Firebase HTTP',response.status,'code:',code.replace(/[^A-Z_0-9-]/gi,'').slice(0,60));
+    // Đừng tiết lộ tài khoản/email nào tồn tại.
+    if(['EMAIL_NOT_FOUND','USER_NOT_FOUND'].includes(code))
+      return res.json({ok:true,message:generic});
+    await redis('DEL',emailKey).catch(()=>{});
+    const explanation=code==='OPERATION_NOT_ALLOWED'
+      ? 'Dịch vụ Locket chưa cho phép gửi email đặt lại mật khẩu bằng cách này.'
+      : 'Firebase từ chối yêu cầu gửi email ('+response.status+'). Kiểm tra Vercel Logs mục Password reset.';
+    return res.status(502).json({error:explanation});
+  }
+  res.json({ok:true,message:'Firebase đã tiếp nhận yêu cầu đặt lại mật khẩu. Hãy kiểm tra email và thư rác; việc nhận thư còn phụ thuộc vào dịch vụ Locket.'});
 }));
 
 app.post('/api/login',wrap(async(req,res)=>{
