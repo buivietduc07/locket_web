@@ -1036,10 +1036,10 @@ button:disabled {
 .studio-send svg{width:43px;height:43px}
 .studio-action:active{transform:scale(.95)}
 .studio-action:disabled{opacity:.45}
-.customize-sheet{position:absolute;z-index:20;inset:0;overflow-y:auto;overscroll-behavior:contain;background:#fff;color:#201f21;padding:17px 13px 32px;border-radius:20px;text-align:left}
+.customize-sheet{position:absolute;z-index:20;inset:0;overflow-y:auto;overscroll-behavior:contain;background:linear-gradient(125deg,#ffffff 0%,#f3f1ff 30%,#f7fcff 60%,#ffffff 100%);background-size:240% 240%;animation:customize-bg-flow 13s ease-in-out infinite;color:#201f21;padding:17px 13px 32px;border-radius:20px;text-align:left}
 .customize-sheet[hidden]{display:none!important}
-.customize-top{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#7368ff;font-size:20px}
-.customize-top button{border:0;background:transparent;color:#8f85ff;font-size:30px;cursor:pointer}
+.customize-top{position:sticky;top:-17px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#7368ff;font-size:20px;min-height:52px;margin:-17px -13px 0;padding:12px 13px 8px;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #eae7f6}
+.customize-top button{margin-left:auto;flex:0 0 40px;width:40px;height:40px;display:grid;place-items:center;border:0;border-radius:50%;background:#f0edff;color:#6056e8;font-size:30px;line-height:1;cursor:pointer;transition:transform .2s ease,background .2s ease}
 .customize-hint{font-size:12px;color:#77726c;line-height:1.6;margin:10px 0}
 .customize-group{margin:20px 0 24px}
 .customize-group h3{font-size:14px;color:#9085ff;margin:0 0 13px}
@@ -1066,3 +1066,11 @@ button:disabled {
 
 /* Preview caption with the exact style selected from Customize Studio */
 .send-studio #postCaption{background:rgba(30,34,40,.65);color:#fff;text-shadow:none;transition:background .15s ease,color .15s ease}
+
+/* Nền sáng chuyển động nhẹ, nút đóng luôn nằm góc phải khi cuộn */
+@keyframes customize-bg-flow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.customize-top strong{font-size:clamp(15px,4vw,20px);min-width:0}
+.customize-top button:hover{background:#e5dfff;transform:rotate(90deg)}
+.customize-top button:active{transform:scale(.93)}
+@media(max-width:550px){.customize-top{top:-14px;margin:-14px -11px 0;padding:10px 11px 8px}}
+@media(prefers-reduced-motion:reduce){.customize-sheet{animation:none}.customize-top button{transition:none}}
