@@ -234,16 +234,25 @@ app.post('/api/forgot-password', wrap(async (req,res) => {
     return res.status(400).json({error:'Nhập địa chỉ email hợp lệ.'});
   if(!configured()) return res.status(503).json({error:'Dịch vụ tạm thời chưa sẵn sàng.'});
 
-  // Throttle toàn cục theo IP và email băm; không ghi địa chỉ email vào Redis.
+  // Giới hạn theo cặp IP + email để nhiều người cùng IP không chặn lẫn nhau.
+  // Namespace v2 không dùng bộ đếm IP cũ đã tích lũy từ các lần thử trước.
   const ip=String(req.headers['x-forwarded-for']||req.ip||'unknown').split(',')[0].trim();
-  const ipKey='locket:reset:ip:'+crypto.createHash('sha256').update(ip).digest('hex');
-  const emailKey='locket:reset:email:'+crypto.createHash('sha256').update(email).digest('hex');
+  const ipHash=crypto.createHash('sha256').update(ip).digest('hex');
+  const emailHash=crypto.createHash('sha256').update(email).digest('hex');
+  const ipEmailKey='locket:reset:v2:'+ipHash+':'+emailHash;
+  const emailKey='locket:reset:email:v2:'+emailHash;
   const generic='Nếu email có tài khoản Locket và được hỗ trợ, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu. Hãy kiểm tra cả thư rác.';
-  const count=Number(await redis('INCR',ipKey));
-  if(count===1)await redis('EXPIRE',ipKey,3600);
-  if(count>5)return res.status(429).json({error:'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau.'});
-  const allowed=await redis('SET',emailKey,'1','EX',900,'NX');
-  if(allowed!=='OK')return res.json({ok:true,message:generic});
+  // Thời gian chờ 60 giây giữa hai email cho cùng một địa chỉ.
+  const allowed=await redis('SET',emailKey,'1','EX',60,'NX');
+  if(allowed!=='OK')
+    return res.status(429).json({error:'Email này vừa được yêu cầu đặt lại mật khẩu. Vui lòng thử lại sau 60 giây.'});
+  // 5 yêu cầu / giờ cho mỗi cặp IP và email; mỗi lượt bấm chỉ đếm một lần.
+  const count=Number(await redis('INCR',ipEmailKey));
+  if(count===1)await redis('EXPIRE',ipEmailKey,3600);
+  if(count>5){
+    await redis('DEL',emailKey).catch(()=>{});
+    return res.status(429).json({error:'Đã vượt quá 5 lần yêu cầu cho email này trong một giờ. Vui lòng thử lại sau.'});
+  }
 
   const resetUrl='https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key='+
     encodeURIComponent(require('locket.js/lib/session').SessionManager.FIREBASE_API_KEY);
