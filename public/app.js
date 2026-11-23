@@ -467,7 +467,7 @@ async function showMessages(chat){
   view.innerHTML='<div class="section-row"><button class="back" id="backChats" type="button">Tin nhắn</button><div class="name">'+esc(name)+'</div><button class="secondary" id="reloadMessages" type="button">Tải lại</button></div>'+
     '<div class="messages" id="messages"></div>'+
     '<div id="typingIndicator" class="typing-indicator" hidden>Đang soạn tin nhắn <span class="typing-dots"><i></i><i></i><i></i></span></div>'+
-    '<form id="sendForm" class="chat-compose"><input name="message" maxlength="4000" autocomplete="off" required placeholder="Nhập tin nhắn..."><button class="primary" type="submit">Gửi</button></form>'+
+    '<form id="sendForm" class="chat-compose"><label class="chat-photo-select" title="Gửi ảnh" aria-label="Chọn ảnh">Ảnh<input id="chatPhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><input name="message" maxlength="4000" autocomplete="off" required placeholder="Nhập tin nhắn..."><button class="primary" type="submit">Gửi</button></form>'+
     '<div class="chat-action-overlay" id="chatActionOverlay" hidden><div class="chat-action-menu" id="chatActionMenu"><div class="chat-action-title">Tùy chọn tin nhắn</div><button type="button" id="deleteForMe">Thu hồi về phía tôi</button><button type="button" id="deleteForEveryone">Thu hồi tất cả</button><button type="button" id="cancelChatAction">Hủy</button></div></div>';
   const root=$('#messages'), form=$('#sendForm'), overlay=$('#chatActionOverlay');
   let selected=null, pressTimer=null, pressStartX=0,pressStartY=0;
@@ -513,7 +513,23 @@ async function showMessages(chat){
     el.className='message-item'+(isMine?' mine':'');
     const bubble=document.createElement('div');
     bubble.className='bubble'+(isMine?' mine':'');
-    bubble.textContent=text;
+    const photo=urlOf(String(m.image_url||''));
+    if(photo){
+      const img=document.createElement('img');
+      img.className='chat-photo';
+      img.src=photo;
+      img.alt='Ảnh trong tin nhắn Locket';
+      img.loading='lazy';
+      img.onerror=()=>{img.replaceWith(document.createTextNode('Không tải được ảnh.'));};
+      bubble.append(img);
+      if(m.image_caption) {
+        const description=document.createElement('div');
+        description.textContent=m.image_caption;
+        bubble.append(description);
+      }
+    }else if(m.moment_uid) {
+      bubble.textContent='Ảnh Locket đã được chia sẻ';
+    } else bubble.textContent=text;
     bubble.setAttribute('role','button');
     bubble.setAttribute('tabindex','0');
     bubble.setAttribute('aria-label','Nhấn giữ để xem tùy chọn tin nhắn');
@@ -573,6 +589,29 @@ async function showMessages(chat){
     typingAt=now;typingBusy=true;
     api('/api/chat-typing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:other,typing:Boolean(form.elements.message.value.trim())})}).catch(()=>{}).finally(()=>{typingBusy=false;});
   });
+  $('#chatPhotoInput').onchange=async event=>{
+    const file=event.target.files?.[0];
+    if(!file)return;
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>12*1024*1024){
+      toast('Chọn ảnh JPG, PNG hoặc WebP tối đa 12 MB.',true);
+      event.target.value='';
+      return;
+    }
+    const button=form.querySelector('.chat-photo-select');
+    button.classList.add('sending');
+    try{
+      const data=new FormData();
+      data.append('uid',other);
+      data.append('photo',file,file.name);
+      const text=form.elements.message.value.trim();
+      if(text)data.append('caption',text.slice(0,250));
+      await api('/api/chat/photo',{method:'POST',body:data});
+      form.elements.message.value='';
+      toast('Đã gửi ảnh vào Locket.');
+      await refreshMessages(true);
+    }catch(err){toast('Gửi ảnh thất bại: '+err.message,true);}
+    finally{button.classList.remove('sending');event.target.value='';}
+  };
   form.onsubmit=async event=>{
     event.preventDefault();
     const text=form.elements.message.value.trim();
