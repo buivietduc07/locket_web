@@ -864,6 +864,9 @@ app.post('/api/post',upload.single('media'),wrap(async(req,res)=>{
   if(kind==='video'&&file.size>60*1024*1024) return res.status(400).json({error:'Video tối đa 60 MB trước nén.'});
 
   const caption=typeof req.body.caption==='string'?req.body.caption.slice(0,250):'';
+  const textColor=String(req.body.textColor||'#FFFFFF').trim();
+  if(!/^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/.test(textColor))
+    return res.status(400).json({error:'Màu chữ không hợp lệ.'});
 
   const visibility=String(req.body.visibility||'all');
 
@@ -893,7 +896,7 @@ app.post('/api/post',upload.single('media'),wrap(async(req,res)=>{
 
   }
 
-  const params={caption,isPrivate:visibility==='private',recipients};
+  const params={caption,textColor,isPrivate:visibility==='private',recipients};
 
   params[kind]=file.buffer;
 
