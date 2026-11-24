@@ -191,6 +191,20 @@ app.use((_req,res,next)=>{
 
 });
 
+// Serve the mail utility only to the configured Locket administrator.
+// The HTML lives outside public/, so static delivery cannot bypass this check.
+app.get(['/mail', '/mail/', '/mail/index.html'], wrap(async (req, res) => {
+  const entry = await loadClient(req);
+  if (!entry) return res.redirect(302, '/');
+  const session = entry.client.session;
+  const email = String(session.email || '').trim().toLowerCase();
+  const adminEmail = String(process.env.PHOTOBOOTH_ADMIN_EMAIL || 'yeuem.m2007@gmail.com').trim().toLowerCase();
+  const adminUid = String(process.env.PHOTOBOOTH_ADMIN_UID || '').trim();
+  if (!session.uid || email !== adminEmail || (adminUid && String(session.uid) !== adminUid))
+    return res.status(403).type('text').send('Chỉ tài khoản Locket quản trị được truy cập trang này.');
+  res.type('html').send(fs.readFileSync(path.join(__dirname, 'private', 'mail', 'index.html'), 'utf8'));
+}));
+
 app.use(express.static(path.join(__dirname,'public')));
 
 
