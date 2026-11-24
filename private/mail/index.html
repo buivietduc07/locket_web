@@ -17,13 +17,13 @@
 <div class="grid">
 <section class="panel" aria-labelledby="newTitle">
 <h2 id="newTitle">Địa chỉ email</h2>
-<p>Tạo tên ngẫu nhiên hoặc tự đặt tên. Không cần mật khẩu riêng cho từng địa chỉ.</p>
-<label for="generated">Địa chỉ hiện tại</label>
+<p>Tạo tên ngẫu nhiên hoặc tự đặt tên. Không cần API Token hoặc tạo Routing Rule riêng.</p>
+<label for="generated">Địa chỉ đã chọn</label>
 <div class="address"><span id="generated" aria-live="polite">Đang tạo...</span><button id="copy" type="button">Sao chép</button></div>
 <label for="custom">Tự đặt tên</label>
 <div class="inputline"><input id="custom" autocomplete="off" maxlength="40" placeholder="Ví dụ: buivducdz" spellcheck="false" aria-describedby="rule"><b>@klab.id.vn</b></div>
 <div class="hint" id="rule">Chỉ dùng chữ thường a-z, số 0-9, dấu chấm, gạch dưới hoặc gạch ngang. Từ 3 đến 40 ký tự.</div>
-<div class="actions"><button class="primary" id="apply" type="button">Tạo trên Cloudflare</button><button id="random" type="button">Đổi tên ngẫu nhiên</button></div>
+<div class="actions"><button class="primary" id="apply" type="button">Lưu địa chỉ</button><button id="random" type="button">Đổi tên ngẫu nhiên</button></div>
 <div class="status" id="status" role="status"></div>
 </section>
 <aside class="panel">
@@ -40,11 +40,11 @@
 </aside>
 </div>
 <section class="panel history">
-<div class="history-header"><h2>Routing Rules trên Cloudflare</h2><button id="refresh" type="button">Đồng bộ lại</button></div>
+<div class="history-header"><h2>Danh sách mail trên thiết bị</h2><button id="refresh" type="button">Làm mới danh sách</button></div>
 <ul id="recent"></ul>
-<p class="empty" id="empty" hidden>Chưa có địa chỉ hoặc chưa kết nối được Cloudflare.</p>
+<p class="empty" id="empty" hidden>Chưa lưu địa chỉ nào.</p>
 </section>
-<p class="footnote"><strong>Lưu ý quan trọng:</strong> Bấm Xóa chỉ xóa quy tắc mà trang này đã tạo trên Cloudflare. Khi <strong>Catch-all</strong> còn bật, địa chỉ đã xóa vẫn có thể nhận thư qua Catch-all. Muốn ngừng nhận thư cho địa chỉ đã xóa, cần tắt Catch-all hoặc dùng quy tắc chặn riêng. Trang không đọc nội dung Gmail trực tiếp.</p>
+<p class="footnote"><strong>Chế độ đơn giản:</strong> Mọi tên email @klab.id.vn có thể nhận thư nhờ quy tắc Catch-all đã bật trên Cloudflare. Trang này chỉ lưu hoặc xóa tên trong trình duyệt hiện tại; không đồng bộ với Cloudflare và không thể ngừng nhận thư bằng nút Xóa. Mã OTP sẽ được chuyển đến Gmail đã cấu hình, không hiển thị trực tiếp tại đây.</p>
 </main>
 <script src="/mail/app.js" defer></script>
 </body>
