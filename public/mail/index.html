@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a1020">
+<meta name="description" content="Tạo địa chỉ email theo tên miền klab.id.vn và nhận thư qua Cloudflare Email Routing.">
+<title>Mail Studio | KLAb</title>
+<style>
+:root{color-scheme:dark;--bg:#090e1b;--panel:#121a2b;--edge:#2a3851;--text:#f1f5ff;--dim:#a8b7cf;--accent:#8bd9f7}
+*{box-sizing:border-box}html{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 80% 0%,#173a52 0,transparent 42%),radial-gradient(ellipse at 10% 70%,#231b41 0,transparent 45%),var(--bg);color:var(--text)}
+main{max-width:1030px;margin:auto;padding:40px 20px 72px}nav{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:70px}nav strong{letter-spacing:.06em;font-size:17px}nav a{color:var(--dim);font-size:13px;text-decoration:none;border:1px solid var(--edge);padding:9px 14px;border-radius:12px}
+.smallcaps{font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--accent);font-weight:750}h1{font-size:clamp(34px,5vw,64px);line-height:1.12;letter-spacing:-.05em;margin:15px 0 16px;max-width:800px}p{line-height:1.75;color:var(--dim)}.intro{max-width:690px;margin-bottom:34px}
+.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(270px,.85fr);gap:20px}.panel{border:1px solid var(--edge);border-radius:24px;background:linear-gradient(150deg,#172238e8,#101827e8);padding:28px;box-shadow:0 20px 50px #0002}.panel h2{margin:0 0 9px;font-size:20px}.panel p{font-size:13px;margin:0 0 24px}label{font-size:12px;font-weight:700;color:#d9e7fa;display:block;margin:20px 0 9px}.address{border:1px solid #3c536d;border-radius:14px;background:#091222;display:flex;align-items:center;gap:8px;padding:10px 12px;min-width:0}.address span{flex:1;overflow-wrap:anywhere;font-size:clamp(14px,1.8vw,20px);font-weight:700}.address button{white-space:nowrap}
+.inputline{display:flex;align-items:center;gap:10px}.inputline input{min-width:0;flex:1;background:#091222;border:1px solid #3c536d;border-radius:12px;color:var(--text);font-size:16px;padding:13px 12px;outline:none}.inputline input:focus{border-color:var(--accent)}.inputline b{color:var(--dim);font-size:13px;white-space:nowrap}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}button,.btn{cursor:pointer;border:1px solid #41516b;border-radius:12px;background:#1a2940;color:var(--text);font:700 13px system-ui;padding:12px 16px;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;transition:background .2s}button:hover,.btn:hover{background:#263c59}.primary{background:var(--accent);color:#061523;border-color:var(--accent)}.primary:hover{background:#b9ecff}.hint{font-size:12px;color:var(--dim);margin-top:17px}.hint strong{color:#d5eaff}.status{min-height:20px;font-size:12px;margin-top:13px;color:#b6efdb}
+.steplist{margin:15px 0 0;padding-left:21px;color:#d2dbeb;font-size:13px;line-height:2}.steplist li{padding-left:4px}.tag{font-size:11px;display:inline-block;padding:7px 10px;background:#162c37;border:1px solid #315e6b;border-radius:30px;color:#b1effe;margin:8px 0 17px}
+.history{margin-top:22px}.history-header{display:flex;justify-content:space-between;align-items:center;gap:10px}.history-header h2{font-size:18px;margin:0}.history-header button{padding:8px 11px}.history ul{list-style:none;padding:0;margin:14px 0 0}.history li{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--edge);padding:13px 0}.history code{font-size:13px;color:#dce9fb;overflow-wrap:anywhere}.history li button{padding:7px 11px;flex-shrink:0}.footnote{border-left:3px solid #8bd9f7;padding:1px 0 1px 16px;margin-top:26px;font-size:12px}.empty{font-size:13px;color:var(--dim)}
+@media(max-width:760px){main{padding:26px 15px 50px}nav{margin-bottom:48px}.grid{grid-template-columns:1fr}.panel{padding:22px}.inputline{flex-wrap:wrap}.inputline input{flex-basis:100%}.history li{align-items:flex-start}}
+</style>
+</head>
+<body>
+<main>
+<nav><strong>KLAb / Mail Studio</strong><a href="/">Trang chủ</a></nav>
+<div class="smallcaps">Email alias generator</div>
+<h1>Tạo địa chỉ mail riêng.<br>Nhận mã qua Gmail.</h1>
+<p class="intro">Dùng địa chỉ <strong>@klab.id.vn</strong> để nhận email và mã xác minh. Thư được chuyển tiếp bởi Cloudflare Email Routing đến Gmail chính đã xác minh của bạn.</p>
+<div class="grid">
+<section class="panel" aria-labelledby="newTitle">
+<h2 id="newTitle">Địa chỉ email</h2>
+<p>Tạo tên ngẫu nhiên hoặc tự đặt tên. Không cần mật khẩu riêng cho từng địa chỉ.</p>
+<label for="generated">Địa chỉ hiện tại</label>
+<div class="address"><span id="generated" aria-live="polite">Đang tạo...</span><button id="copy" type="button">Sao chép</button></div>
+<label for="custom">Tự đặt tên</label>
+<div class="inputline"><input id="custom" autocomplete="off" maxlength="40" placeholder="Ví dụ: buivducdz" spellcheck="false" aria-describedby="rule"><b>@klab.id.vn</b></div>
+<div class="hint" id="rule">Chỉ dùng chữ thường a-z, số 0-9, dấu chấm, gạch dưới hoặc gạch ngang. Từ 3 đến 40 ký tự.</div>
+<div class="actions"><button class="primary" id="apply" type="button">Dùng tên này</button><button id="random" type="button">Tạo ngẫu nhiên</button></div>
+<div class="status" id="status" role="status"></div>
+</section>
+<aside class="panel">
+<h2>Nhận mã xác minh</h2>
+<div class="tag">Cloudflare Email Routing</div>
+<ol class="steplist">
+<li>Sao chép email vừa tạo.</li>
+<li>Nhập email đó trên dịch vụ cần đăng ký.</li>
+<li>Chọn gửi mã xác minh.</li>
+<li>Mở Gmail nhận thư mà bạn đã cài trên Cloudflare.</li>
+</ol>
+<a class="btn primary" href="https://mail.google.com/mail/u/0/#inbox" target="_blank" rel="noopener noreferrer" style="margin-top:22px">Mở hộp thư Gmail</a>
+<p class="hint" style="margin-top:15px">Nếu chưa thấy mã, hãy kiểm tra Spam hoặc Cloudflare Email Routing → Activity log.</p>
+</aside>
+</div>
+<section class="panel history">
+<div class="history-header"><h2>Địa chỉ đã tạo trên thiết bị này</h2><button id="clear" type="button">Xóa danh sách</button></div>
+<ul id="recent"></ul>
+<p class="empty" id="empty" hidden>Chưa có địa chỉ nào.</p>
+</section>
+<p class="footnote"><strong>Quan trọng:</strong> Trang này tạo và lưu tên email trên trình duyệt, không tạo tài khoản Gmail và không đọc nội dung thư trực tiếp. Mail chỉ nhận được khi Cloudflare đã bật quy tắc Catch-all hoặc có quy tắc chuyển tiếp phù hợp cho <strong>klab.id.vn</strong>. Người khác cũng có thể gửi đến cùng địa chỉ; không dùng địa chỉ công khai làm hộp thư bảo mật.</p>
+</main>
+<script>
+(function(){
+'use strict';
+const domain='klab.id.vn', key='klab-mail-recent-v1';
+const $=id=>document.getElementById(id);
+let current='';
+function recent(){try{let x=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(x)?x.filter(v=>typeof v==='string'&&v.endsWith('@'+domain)).slice(0,20):[]}catch{return []}}
+function persist(v){try{localStorage.setItem(key,JSON.stringify([v,...recent().filter(x=>x!==v)].slice(0,20)))}catch{}}
+function notice(t){$('status').textContent=t}
+function paint(){const list=$('recent');list.textContent='';const a=recent();$('empty').hidden=a.length>0;for(const s of a){const li=document.createElement('li'),code=document.createElement('code'),btn=document.createElement('button');code.textContent=s;btn.type='button';btn.textContent='Sao chép';btn.addEventListener('click',()=>copy(s));li.append(code,btn);list.append(li)}}
+function use(local){current=local+'@'+domain;$('generated').textContent=current;persist(current);paint();notice('Địa chỉ sẵn sàng để sao chép. Việc nhận thư phụ thuộc quy tắc Email Routing.')}
+async function copy(t){try{await navigator.clipboard.writeText(t);notice('Đã sao chép '+t)}catch{notice('Không sao chép tự động được. Hãy chọn và sao chép thủ công.')}}
+function rand(){const x=new Uint8Array(5);crypto.getRandomValues(x);return 'mail'+Array.from(x,b=>b.toString(16).padStart(2,'0')).join('')}
+$('random').addEventListener('click',()=>{use(rand());$('custom').value=''});
+$('copy').addEventListener('click',()=>copy(current));
+$('apply').addEventListener('click',()=>{const s=$('custom').value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]$/.test(s)||s.includes('..')){notice('Tên không hợp lệ. Kiểm tra lại hướng dẫn bên dưới.');return}use(s)});
+$('custom').addEventListener('keydown',e=>{if(e.key==='Enter')$('apply').click()});
+$('clear').addEventListener('click',()=>{try{localStorage.removeItem(key)}catch{}paint();notice('Đã xóa danh sách trên thiết bị này. Các địa chỉ vẫn có thể nhận thư qua Catch-all.')});
+const last=recent()[0];use(last?last.split('@')[0]:rand());
+})();
+</script>
+</body>
+</html>
