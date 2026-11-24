@@ -721,7 +721,36 @@ function clearRecordTimer() {
   recordAnimation = null;
 }
 
+let boothMode = false;
+let boothFirst = null;
+let boothBusy = false;
+function resetBooth() {
+  boothFirst = null;
+  boothMode = false;
+}
+function renderBooth() {
+  const button = $('#boothToggle');
+  const preview = $('#boothFirst');
+  const label = $('#boothStep');
+  if (!button || !preview || !label) return;
+  button.setAttribute('aria-pressed', String(boothMode));
+  preview.hidden = !boothMode || !boothFirst;
+  label.hidden = !boothMode;
+  label.textContent = boothFirst ? '1/2 - Chụp ảnh tiếp theo' : '0/2 - Photobooth';
+  if (boothFirst) $('#boothThumb').src = boothFirst.toDataURL('image/jpeg', .75);
+}
+function boothDraw(ctx, image, x, y, w, h) {
+  const scale = Math.max(w/image.width,h/image.height);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x,y,w,h);
+  ctx.clip();
+  ctx.drawImage(image,x+(w-image.width*scale)/2,y+(h-image.height*scale)/2,image.width*scale,image.height*scale);
+  ctx.restore();
+}
+
 function showCamera() {
+  resetBooth();
   view.innerHTML = `
     <div class="locket-camera">
       <div class="camera-friends">${state.friends.length} người bạn</div>
@@ -729,6 +758,9 @@ function showCamera() {
       <div class="camera-stage" id="cameraStage">
         <video id="liveVideo" autoplay muted playsinline></video>
         <div id="cameraPlaceholder" class="camera-placeholder">Đang mở camera...</div>
+        <button id="boothToggle" class="booth-toggle" type="button" aria-label="Photobooth hai ảnh" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/><path d="M4 3v4M2 5h4M20 18v4M18 20h4"/></svg></button>
+        <div id="boothFirst" class="booth-first" hidden><img id="boothThumb" alt="Ảnh thứ nhất"><button id="boothClear" type="button" aria-label="Chụp lại ảnh thứ nhất">×</button></div>
+        <div id="boothStep" class="booth-step" hidden></div>
         <div class="record-progress" id="recordProgress"></div>
         <div class="record-time" id="recordTime">00:00 / 01:00</div>
       </div>
@@ -745,6 +777,17 @@ function showCamera() {
   let holding = false;
   let recordingStarted = false;
   const shutter = $('#takePhoto');
+  $('#boothToggle').onclick = () => {
+    if (holding || boothBusy || state.recorder?.state === 'recording') return;
+    boothMode = !boothMode;
+    boothFirst = null;
+    renderBooth();
+  };
+  $('#boothClear').onclick = () => {
+    if (boothBusy) return;
+    boothFirst = null;
+    renderBooth();
+  };
 
   shutter.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -756,7 +799,7 @@ function showCamera() {
     shutter.setPointerCapture?.(event.pointerId);
     holdTimer = setTimeout(() => {
       holdTimer = null;
-      if (holding) recordingStarted = startRecording();
+      if (holding && !boothMode) recordingStarted = startRecording();
     }, 300);
   });
 
@@ -846,8 +889,31 @@ if (isMirrored) {
 
 context.drawImage(video, 0, 0);
 context.restore();
+  if (boothBusy) return;
+  if (boothMode) {
+    if (!boothFirst) {
+      boothFirst = canvas;
+      renderBooth();
+      return;
+    }
+    const combined = document.createElement('canvas');
+    combined.width = combined.height = 1080;
+    const ctx = combined.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,0,1080,1080);
+    boothDraw(ctx,boothFirst,16,16,1048,516);
+    boothDraw(ctx,canvas,16,548,1048,516);
+    boothBusy = true;
+    combined.toBlob(blob => {
+      boothBusy = false;
+      if (!blob || !video.isConnected) return;
+      resetBooth();
+      chooseFile(new File([blob], 'locket-photobooth-'+Date.now()+'.jpg',{type:'image/jpeg'}));
+    },'image/jpeg',.92);
+    return;
+  }
   canvas.toBlob(blob => {
-    if (blob) chooseFile(new File([blob], `locket-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+    if (blob && video.isConnected) chooseFile(new File([blob], `locket-${Date.now()}.jpg`, { type: 'image/jpeg' }));
   }, 'image/jpeg', .9);
 }
 
