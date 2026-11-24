@@ -737,7 +737,14 @@ function renderBooth() {
   preview.hidden = !boothMode || !boothFirst;
   label.hidden = !boothMode;
   label.textContent = boothFirst ? '1/2 - Chụp ảnh tiếp theo' : '0/2 - Photobooth';
-  if (boothFirst) $('#boothThumb').src = boothFirst.toDataURL('image/jpeg', .75);
+  if (boothFirst) {
+    const thumb = document.createElement('canvas');
+    thumb.width = thumb.height = 176;
+    boothDraw(thumb.getContext('2d'),boothFirst,0,0,176,176);
+    $('#boothThumb').src = thumb.toDataURL('image/jpeg', .75);
+  } else {
+    $('#boothThumb').removeAttribute('src');
+  }
 }
 function boothDraw(ctx, image, x, y, w, h) {
   const scale = Math.max(w/image.width,h/image.height);
@@ -848,10 +855,10 @@ async function startCamera(facing = 'user') {
     if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
     if (placeholder) { placeholder.hidden = false; placeholder.textContent = 'Đang mở camera...'; }
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280, max: 1280 }, height: { ideal: 720, max: 1280 }, frameRate: { ideal: 30, max: 30 } },
       audio: true
     }).catch(async () => navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facing } }, audio: false
+      video: { facingMode: { ideal: facing }, width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } }, audio: false
     }));
     if (requestId !== cameraRequestId || !video.isConnected || state.tab !== 'camera') {
       stream.getTracks().forEach(t => t.stop());
@@ -870,11 +877,13 @@ async function startCamera(facing = 'user') {
 }
 
 function takePhoto() {
+  if (boothBusy) return;
   const video = $('#liveVideo');
   if (!state.stream || !video?.videoWidth) { toast('Camera chưa sẵn sàng.', true); return; }
   const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
   const context = canvas.getContext('2d');
 
 const isMirrored =
@@ -887,7 +896,7 @@ if (isMirrored) {
   context.scale(-1, 1);
 }
 
-context.drawImage(video, 0, 0);
+context.drawImage(video, 0, 0, canvas.width, canvas.height);
 context.restore();
   if (boothBusy) return;
   if (boothMode) {
@@ -931,7 +940,7 @@ function updateRecordProgress() {
 function startRecording() {
   if (!state.stream || state.recorder?.state === 'recording') return false;
   if (typeof MediaRecorder === 'undefined') { toast('Trình duyệt không hỗ trợ quay video.', true); return false; }
-  const types = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const types = ['video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'];
   const mime = types.find(t => MediaRecorder.isTypeSupported(t));
   if (!mime) { toast('Không có định dạng quay được hỗ trợ.', true); return false; }
   try {
@@ -944,21 +953,25 @@ function startRecording() {
     let oldTransform = null;
     if (mirrored && liveVideo?.videoWidth && typeof HTMLCanvasElement !== 'undefined') {
       const canvas = document.createElement('canvas');
-      canvas.width = liveVideo.videoWidth;
-      canvas.height = liveVideo.videoHeight;
+      const scale = Math.min(1, 960 / Math.max(liveVideo.videoWidth, liveVideo.videoHeight));
+      canvas.width = Math.max(2, Math.floor(liveVideo.videoWidth * scale / 2)*2);
+      canvas.height = Math.max(2, Math.floor(liveVideo.videoHeight * scale / 2)*2);
       const ctx = canvas.getContext('2d');
       if (ctx && typeof canvas.captureStream === 'function') {
         try {
           mirrorStream = canvas.captureStream(30);
           for (const track of state.stream.getAudioTracks()) mirrorStream.addTrack(track);
-          const frame = () => {
+          let lastFrame = -Infinity;
+          const frame = now => {
             if (!state.recorder || state.recorder.state === 'inactive') return;
+            mirrorTimer = requestAnimationFrame(frame);
+            if (now - lastFrame < 32) return;
+            lastFrame = now;
             ctx.save();
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
             ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
             ctx.restore();
-            mirrorTimer = requestAnimationFrame(frame);
           };
           recordingStream = mirrorStream;
           // Render one frame before recording begins.
@@ -983,7 +996,7 @@ function startRecording() {
       oldTransform = liveVideo.style.transform;
       liveVideo.style.transform = 'none';
     }
-    const recorder = new MediaRecorder(recordingStream, { mimeType: mime });
+    const recorder = new MediaRecorder(recordingStream, { mimeType: mime, videoBitsPerSecond: 2000000 });
     state.recorder = recorder;
     recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
     recorder.onerror = event => { clearRecordTimer(); toast('Quay video bị lỗi.', true); console.error(event); };
