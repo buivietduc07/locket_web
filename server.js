@@ -303,7 +303,10 @@ app.get('/api/feed',wrap(async(req,res)=>{
         if (!doc || !doc.fields) continue;
         const f = doc.fields;
         const mid = f.canonical_uid?.stringValue || f.moment_uid?.stringValue || doc.name?.split('/').pop();
-        const rawUser = f.user?.stringValue || f.user?.referenceValue || '';
+        const rawUser = f.user?.stringValue || f.user?.referenceValue ||
+          f.user_uid?.stringValue || f.sender_uid?.stringValue ||
+          f.sender?.stringValue || f.owner_uid?.stringValue ||
+          f.user?.mapValue?.fields?.uid?.stringValue || '';
         const owner = String(rawUser).split('/').pop();
         if (mid && owner && /^[A-Za-z0-9_-]{8,128}$/.test(owner)) historyAuthors.set(String(mid),owner);
       }
@@ -385,6 +388,33 @@ app.get('/api/feed',wrap(async(req,res)=>{
   };
 
   const moments=[...items.values()].sort((a,b)=>dateMs(b)-dateMs(a));
+
+  // Gắn hồ sơ người đăng từ UID xác minh được. Không đoán người đăng khi UID thiếu.
+  const authorUid = m => {
+    const value = m.user_uid || m.author_uid || m.sender_uid || m.user || m.sender;
+    const id = typeof value === 'string' ? value : (value && typeof value === 'object'
+      ? (value.uid || value.user_uid || value.id || '') : '');
+    const normalized = String(id).split('/').pop();
+    return /^[A-Za-z0-9_-]{8,128}$/.test(normalized) ? normalized : '';
+  };
+  const client = res.locals.client;
+  const ids=[...new Set(moments.map(authorUid).filter(Boolean))].slice(0,30);
+  const profiles = new Map();
+  await Promise.all(ids.map(async id=>{
+    try {
+      const profile = await client.user.getProfile(id);
+      if(profile && typeof profile==='object') profiles.set(id,profile);
+    } catch(err) {
+      console.warn('[Locket] Không tải được hồ sơ người đăng:',id,err.message);
+    }
+  }));
+  for(const moment of moments){
+    const id=authorUid(moment);
+    if(!id)continue;
+    moment.user_uid=id;
+    const profile=profiles.get(id);
+    if(profile) moment.author_profile=profile;
+  }
 
   res.json(clean({moments,nextPageToken:history?.nextPageToken||null}));
 
