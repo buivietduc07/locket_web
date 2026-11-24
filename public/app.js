@@ -721,6 +721,20 @@ function clearRecordTimer() {
   recordAnimation = null;
 }
 
+let boothFramePromise = null;
+function loadBoothFrame() {
+  if (!boothFramePromise) {
+    const load = src => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+    boothFramePromise = load('/photobooth-frame.png').then(img => img || load('/photobooth-frame.svg'));
+  }
+  return boothFramePromise;
+}
+
 let boothMode = false;
 let boothFirst = null;
 let boothBusy = false;
@@ -787,6 +801,7 @@ function showCamera() {
   $('#boothToggle').onclick = () => {
     if (holding || boothBusy || state.recorder?.state === 'recording') return;
     boothMode = !boothMode;
+    if (boothMode) loadBoothFrame();
     boothFirst = null;
     renderBooth();
   };
@@ -908,17 +923,31 @@ context.restore();
     const combined = document.createElement('canvas');
     combined.width = combined.height = 1080;
     const ctx = combined.getContext('2d');
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#fff6e2';
     ctx.fillRect(0,0,1080,1080);
-    boothDraw(ctx,boothFirst,16,16,1048,516);
-    boothDraw(ctx,canvas,16,548,1048,516);
+    boothDraw(ctx,boothFirst,76,64,928,454);
+    boothDraw(ctx,canvas,76,540,928,466);
     boothBusy = true;
-    combined.toBlob(blob => {
+    loadBoothFrame().then(frame => {
+      if (!video.isConnected) { boothBusy = false; return; }
+      if (frame) ctx.drawImage(frame,0,0,1080,1080);
+      else {
+        ctx.strokeStyle = '#fff6e2';
+        ctx.lineWidth = 10;
+        ctx.strokeRect(76,64,928,454);
+        ctx.strokeRect(76,540,928,466);
+      }
+      combined.toBlob(blob => {
+        boothBusy = false;
+        if (!video.isConnected) return;
+        if (!blob) { toast('Không ghép được ảnh Photobooth.',true); return; }
+        resetBooth();
+        chooseFile(new File([blob], 'locket-photobooth-'+Date.now()+'.jpg',{type:'image/jpeg'}));
+      },'image/jpeg',.92);
+    }).catch(() => {
       boothBusy = false;
-      if (!blob || !video.isConnected) return;
-      resetBooth();
-      chooseFile(new File([blob], 'locket-photobooth-'+Date.now()+'.jpg',{type:'image/jpeg'}));
-    },'image/jpeg',.92);
+      toast('Không ghép được ảnh Photobooth.',true);
+    });
     return;
   }
   canvas.toBlob(blob => {
