@@ -208,6 +208,84 @@ app.get(['/mail', '/mail/', '/mail/index.html'], wrap(async (req, res) => {
 app.use(express.static(path.join(__dirname,'public')));
 
 
+// Cloudflare Email Routing management for the signed-in Locket administrator.
+const MAIL_DOMAIN='klab.id.vn';
+const mailAdmin=wrap(async(req,res,next)=>{
+  const entry=await loadClient(req);
+  if(!entry)return res.status(401).json({error:'Cần đăng nhập tài khoản Locket admin.'});
+  const session=entry.client.session;
+  const adminEmail=String(process.env.PHOTOBOOTH_ADMIN_EMAIL||'yeuem.m2007@gmail.com').trim().toLowerCase();
+  const adminUid=String(process.env.PHOTOBOOTH_ADMIN_UID||'').trim();
+  if(!session.uid||String(session.email||'').trim().toLowerCase()!==adminEmail||(adminUid&&String(session.uid)!==adminUid))
+    return res.status(403).json({error:'Không có quyền quản lý email.'});
+  next();
+});
+async function mailCloudflare(endpoint,method='GET',body){
+  const zone=normalizedEnv('CLOUDFLARE_MAIL_ZONE_ID');
+  const token=normalizedEnv('CLOUDFLARE_MAIL_API_TOKEN');
+  if(!/^[a-f0-9]{32}$/i.test(zone)||!token)
+    throw Object.assign(new Error('Chưa cấu hình CLOUDFLARE_MAIL_ZONE_ID hoặc CLOUDFLARE_MAIL_API_TOKEN trên Vercel.'),{status:503});
+  const response=await fetch('https://api.cloudflare.com/client/v4/zones/'+zone+'/email/routing/rules'+endpoint,{
+    method,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    ...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(12000)
+  });
+  const result=await response.json().catch(()=>null);
+  if(!response.ok||!result?.success){
+    const reason=(result?.errors||[]).map(x=>x.message).join('; ').slice(0,180);
+    throw Object.assign(new Error('Cloudflare API '+response.status+(reason?': '+reason:'')),{status:response.status===403?403:502});
+  }
+  return result;
+}
+function mailRuleAddress(rule){
+  const to=(rule.matchers||[]).find(m=>m.type==='literal'&&m.field==='to');
+  return typeof to?.value==='string'?to.value.toLowerCase():'';
+}
+async function listCloudflareMailRules(){
+  const rules=[];
+  for(let page=1;page<=10;page++){
+    const response=await mailCloudflare('?page='+page+'&per_page=100');
+    rules.push(...(Array.isArray(response.result)?response.result:[]));
+    if(page>=Number(response.result_info?.total_pages||1))break;
+  }
+  return rules;
+}
+app.get('/api/mail/rules',mailAdmin,wrap(async(_req,res)=>{
+  const rules=await listCloudflareMailRules();
+  res.json({domain:MAIL_DOMAIN,rules:rules.filter(r=>mailRuleAddress(r).endsWith('@'+MAIL_DOMAIN)).map(r=>({
+    id:r.id,address:mailRuleAddress(r),name:r.name||'',enabled:Boolean(r.enabled),
+    managed:String(r.name||'').startsWith('Mail Studio | '),
+    action:r.actions?.[0]?.type||''
+  }))});
+}));
+app.post('/api/mail/rules',checkOrigin,mailAdmin,wrap(async(req,res)=>{
+  const local=String(req.body?.local||'').trim().toLowerCase();
+  if(!/^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]$/.test(local)||local.includes('..'))
+    return res.status(400).json({error:'Tên email không hợp lệ (3–40 ký tự).'});
+  const address=local+'@'+MAIL_DOMAIN;
+  const rules=await listCloudflareMailRules();
+  if(rules.some(r=>mailRuleAddress(r)===address))
+    return res.status(409).json({error:'Địa chỉ này đã có quy tắc trên Cloudflare.'});
+  const destination=normalizedEnv('CLOUDFLARE_MAIL_DESTINATION');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination))
+    return res.status(503).json({error:'Thiếu CLOUDFLARE_MAIL_DESTINATION (Gmail đã xác minh).'});
+  const data=await mailCloudflare('','POST',{
+    actions:[{type:'forward',value:[destination]}],
+    matchers:[{type:'literal',field:'to',value:address}],
+    enabled:true,name:'Mail Studio | '+address
+  });
+  res.status(201).json({ok:true,address,id:data.result?.id});
+}));
+app.delete('/api/mail/rules/:id',checkOrigin,mailAdmin,wrap(async(req,res)=>{
+  const id=String(req.params.id||'');
+  if(!/^[a-f0-9]{32}$/i.test(id))return res.status(400).json({error:'ID không hợp lệ.'});
+  const data=await mailCloudflare('/'+id);
+  const rule=data.result;
+  if(!String(rule?.name||'').startsWith('Mail Studio | ')||!mailRuleAddress(rule).endsWith('@'+MAIL_DOMAIN))
+    return res.status(403).json({error:'Chỉ xóa được các quy tắc do Mail Studio tạo.'});
+  await mailCloudflare('/'+id,'DELETE');
+  res.json({ok:true,warning:'Catch-all đang bật sẽ vẫn chuyển tiếp thư đến địa chỉ này.'});
+}));
+
 app.get('/api/bootstrap',wrap(async(req,res)=>{
   const entry=await loadClient(req);
   res.json({loggedIn:Boolean(entry)});
