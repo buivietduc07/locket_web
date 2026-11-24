@@ -1,0 +1,494 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebClip Generator | buivduc07</title>
+
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, sans-serif;
+    background: #f4f5f7;
+    margin: 0;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.08);
+  }
+
+  h1 {
+    font-size: 20px;
+    margin: 0 0 20px;
+  }
+
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 14px 0 6px;
+    color: #333;
+  }
+
+  input[type=text],
+  input[type=url],
+  input[type=number],
+  input[type=file] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d0d4da;
+    border-radius: 10px;
+    font-size: 14px;
+    outline: none;
+  }
+
+  input:focus { border-color: #007aff; }
+
+  .row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .row > div { flex: 1; }
+
+  #preview {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+    object-fit: cover;
+    margin-top: 10px;
+    border: 1px solid #e0e0e0;
+    display: none;
+  }
+
+  button {
+    width: 100%;
+    margin-top: 24px;
+    padding: 14px;
+    background: #007aff;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  button:active { background: #0056b3; }
+  button:disabled { opacity: .6; cursor: wait; }
+
+  .hint {
+    font-size: 12px;
+    color: #888;
+    margin-top: 6px;
+  }
+
+  .warn {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    color: #7a5c00;
+    margin-top: 18px;
+  }
+
+  #status {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #333;
+    overflow-wrap: anywhere;
+  }
+</style>
+</head>
+
+<body>
+<div class="card">
+
+  <h1>📱 Tạo cấu hình WebClip</h1>
+
+  <label>Tên cấu hình (hiển thị trong Cài đặt iPhone)</label>
+  <input
+    type="text"
+    id="profileName"
+    value="BUiViETDUC07 VIP"
+  >
+
+  <label>Tên app (hiển thị trên màn hình chính)</label>
+  <input
+    type="text"
+    id="appName"
+    value="buivduc07"
+    maxlength="32"
+  >
+
+  <label>URL mở khi bấm icon</label>
+  <input
+    type="url"
+    id="appUrl"
+    value="https://buivduc07.xyz/profile"
+  >
+
+  <div class="row">
+    <div>
+      <label>Số lượng icon</label>
+      <input
+        type="number"
+        id="appCount"
+        value="1"
+        min="1"
+        max="1000"
+      >
+    </div>
+
+    <div>
+      <label>Phân biệt URL bằng query</label>
+      <input
+        type="text"
+        id="appQuery"
+        value="app"
+      >
+    </div>
+  </div>
+
+  <p class="hint">
+    Nếu tạo nhiều icon, URL sẽ có dạng
+    ?app=1, ?app=2, ?app=3...
+  </p>
+
+<label>Icon (PNG, JPG, JPEG)</label>
+<input
+  type="file"
+  id="appIcon"
+  accept="image/png,image/jpeg,.jpg,.jpeg"
+>
+
+
+  <img id="preview" alt="Icon preview">
+
+  <button id="downloadBtn" type="button">
+    ⬇️ Tải file .mobileconfig
+  </button>
+
+  <div id="status" role="status"></div>
+  <a id="saveLink" download="profile.mobileconfig" style="display:none; margin-top:12px; padding:14px; text-align:center; background:#16803c; color:white; border-radius:12px; text-decoration:none; font-weight:600">⬇️ Nhấn đây để tải cấu hình</a>
+  <button id="shareBtn" type="button" style="display:none; background:#333; margin-top:10px">📁 Lưu vào Tệp trên iPhone</button>
+
+  <div class="warn">
+    ⚠️ Người dùng phải tự xác nhận cài đặt cấu hình
+    trong Cài đặt iPhone. iOS không hỗ trợ
+    tự động cài profile.
+    <p>
+      Tạo 1000 icon có thể khiến profile quá lớn
+      hoặc iPhone từ chối cài đặt.
+    </p>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+$('downloadBtn').addEventListener('click', generate);
+window.addEventListener('error', e => { $('status').textContent = 'Lỗi JavaScript: ' + e.message; });
+
+// XEM TRƯỚC ICON
+$('appIcon').addEventListener('change', e => {
+  const file = e.target.files[0];
+
+  if (!file) {
+    $('preview').style.display = 'none';
+    $('preview').removeAttribute('src');
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = ev => {
+    $('preview').src = ev.target.result;
+    $('preview').style.display = 'block';
+  };
+
+  reader.readAsDataURL(file);
+});
+
+// TẠO UUID
+function uuid() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().toUpperCase();
+  }
+
+  const bytes = new Uint8Array(16);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+  else for (let i=0;i<bytes.length;i++) bytes[i] = Math.floor(Math.random()*256);
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, b =>
+    b.toString(16).padStart(2, '0')
+  ).join('');
+
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20)
+  ].join('-').toUpperCase();
+}
+
+// CHỐNG LỖI XML
+function esc(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// TẠO NỘI DUNG MOBILECONFIG
+function buildPlist(
+  profileName,
+  name,
+  url,
+  count,
+  queryParam,
+  iconData
+) {
+  const profileId = uuid().toLowerCase();
+
+  const iconTag = iconData
+    ? `<key>Icon</key><data>${iconData}</data>`
+    : '';
+
+  let payloads = '';
+
+  for (let i = 1; i <= count; i++) {
+
+    const finalUrl = new URL(url);
+
+    if (count > 1) {
+      finalUrl.searchParams.set(queryParam, String(i));
+    }
+
+    payloads += `
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.webClip.managed</string>
+
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+
+      <key>PayloadIdentifier</key>
+      <string>com.buivduc07.webclip.${profileId}.${i}</string>
+
+      <key>PayloadUUID</key>
+      <string>${uuid()}</string>
+
+      <key>PayloadDisplayName</key>
+      <string>${esc(name)}</string>
+
+      <key>URL</key>
+      <string>${esc(finalUrl.href)}</string>
+
+      <key>Label</key>
+      <string>${esc(name)}</string>
+
+      <key>IsRemovable</key>
+      <true/>
+
+      <key>FullScreen</key>
+      <false/>
+
+      ${iconTag}
+    </dict>`;
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <key>PayloadType</key>
+  <string>Configuration</string>
+
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+
+  <key>PayloadIdentifier</key>
+  <string>com.buivduc07.profile.${profileId}</string>
+
+  <key>PayloadUUID</key>
+  <string>${uuid()}</string>
+
+<key>Label</key>
+<string>${esc(name)}</string>
+
+  <key>PayloadOrganization</key>
+  <string>buivduc07</string>
+
+<key>PayloadDescription</key>
+<string> locket gold ${count} .</string>
+
+  <key>PayloadContent</key>
+  <array>
+    ${payloads}
+  </array>
+
+</dict>
+</plist>`;
+}
+
+async function convertIconToPNG(file) {
+  if (!file) return null;
+  if (!/\.(png|jpe?g)$/i.test(file.name) &&
+      !['image/png','image/jpeg'].includes(file.type)) {
+    throw new Error('Chỉ hỗ trợ PNG, JPG, JPEG');
+  }
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Không đọc được ảnh'));
+    reader.readAsDataURL(file);
+  });
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Ảnh không hợp lệ'));
+    img.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 180;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, 180, 180);
+  ctx.drawImage(image, 0, 0, 180, 180);
+  return canvas.toDataURL('image/png').split(',')[1];
+}
+
+let activeDownloadUrl = null;
+let activeFile = null;
+$('shareBtn').addEventListener('click', async () => {
+  if (!activeFile) return;
+  try {
+    if (navigator.canShare && navigator.canShare({files:[activeFile]})) {
+      await navigator.share({files:[activeFile]});
+    } else {
+      $('status').textContent = 'Máy không hỗ trợ chia sẻ file. Nhấn nút tải màu xanh lá.';
+      $('saveLink').click();
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') $('status').textContent = 'Lỗi lưu Tệp: ' + err.message;
+  }
+});
+
+// TẠO VÀ TẢI FILE
+async function generate() {
+
+  const profileName =
+    $('profileName').value.trim() || 'BUiViETDUC07 VIP';
+
+  const name =
+    $('appName').value.trim() || 'buivduc07';
+
+  const url = $('appUrl').value.trim();
+
+  const rawCount = Number.parseInt(
+    $('appCount').value, 10
+  );
+
+  const count = Math.max(
+    1,
+    Math.min(1000, rawCount || 1)
+  );
+
+  const query =
+    $('appQuery').value.trim() || 'app';
+
+  if (!url) {
+    alert('Vui lòng nhập URL!');
+    return;
+  }
+
+  try {
+    const parsed = new URL(url);
+
+    if (!['https:', 'http:'].includes(parsed.protocol)) {
+      throw new Error('URL phải bắt đầu bằng HTTPS hoặc HTTP');
+    }
+
+    if (!query || /[&#=?]/.test(query)) {
+      throw new Error('Tên query không hợp lệ');
+    }
+  } catch (error) {
+    alert('URL hoặc query không hợp lệ: ' + error.message);
+    return;
+  }
+
+  const iconFile = $('appIcon').files[0];
+  const button = $('downloadBtn');
+
+  $('saveLink').style.display = 'none';
+  $('shareBtn').style.display = 'none';
+  button.disabled = true;
+  $('status').textContent = 'Đang tạo cấu hình...';
+
+  try {
+    let iconData = null;
+    if (iconFile) {
+      iconData = await convertIconToPNG(iconFile);
+    }
+
+    const plist = buildPlist(
+      profileName,
+      name,
+      url,
+      count,
+      query,
+      iconData
+    );
+
+    if (count > 200) $('status').textContent = 'Cảnh báo: iPhone có thể từ chối cấu hình quá lớn.';
+    const blob = new Blob([plist], {
+      type: 'application/x-apple-aspen-config'
+    });
+
+    if (activeDownloadUrl) URL.revokeObjectURL(activeDownloadUrl);
+    activeDownloadUrl = URL.createObjectURL(blob);
+    const filename = (profileName.replace(/[^a-zA-Z0-9_\u00C0-\u1EF9-]+/g, '_') || 'profile') + '.mobileconfig';
+    activeFile = new File([blob], filename, {type:'application/x-apple-aspen-config'});
+    const saveLink = $('saveLink');
+    saveLink.href = activeDownloadUrl;
+    saveLink.download = filename;
+    saveLink.style.display = 'block';
+    $('shareBtn').style.display = 'block';
+    // Thử tải ngay; nếu Safari chặn, liên kết tải và nút chia sẻ vẫn còn.
+    saveLink.click();
+
+    $('status').textContent =
+      `Đã tạo file gồm ${count} WebClip. Nhấn nút màu xanh lá để tải, hoặc Lưu vào Tệp. ` +
+      `Dung lượng: ${(blob.size / 1024).toFixed(1)} KB.`;
+
+  } catch (error) {
+    $('status').textContent = 'Lỗi: ' + error.message;
+    alert('Không tạo được file: ' + error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
