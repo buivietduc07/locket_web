@@ -721,20 +721,45 @@ function clearRecordTimer() {
   recordAnimation = null;
 }
 
-let boothFramePromise = null;
-function loadBoothFrame() {
-  if (!boothFramePromise) {
+const boothFrames = {
+  plain: {name:'Khung trắng', urls:[]},
+  kimetsu: {name:'Thanh Gươm Diệt Quỷ',urls:['/photobooth-frame.png','/photobooth-frame.svg']},
+  onepiece: {name:'One Piece',urls:['/photobooth-onepiece.png','/photobooth-onepiece.svg']}
+};
+let boothTheme = 'kimetsu';
+const boothFrameCache = new Map();
+function loadBoothFrame(theme = boothTheme) {
+  if (!boothFrameCache.has(theme)) {
     const load = src => new Promise(resolve => {
       const img = new Image();
       img.onload = () => resolve(img);
       img.onerror = () => resolve(null);
       img.src = src;
     });
-    boothFramePromise = load('/photobooth-frame.png').then(img => img || load('/photobooth-frame.svg'));
+    boothFrameCache.set(theme,(async()=>{
+      for (const src of boothFrames[theme].urls) {
+        const img = await load(src);
+        if (img) return img;
+      }
+      return null;
+    })());
   }
-  return boothFramePromise;
+  return boothFrameCache.get(theme);
 }
-
+function openBoothPicker() {
+  const picker = $('#boothPicker');
+  if (!picker) return;
+  picker.hidden = false;
+  picker.querySelectorAll('[data-booth-theme]').forEach(btn=>{
+    btn.classList.toggle('selected',boothMode && btn.dataset.boothTheme===boothTheme);
+    if(btn.dataset.boothTheme!=='off'){
+      const img=btn.querySelector('img');
+      loadBoothFrame(btn.dataset.boothTheme).then(frame=>{
+        if(img && frame && img.isConnected) img.src=frame.src;
+      });
+    }
+  });
+}
 let boothMode = false;
 let boothFirst = null;
 let boothBusy = false;
@@ -782,6 +807,15 @@ function showCamera() {
         <button id="boothToggle" class="booth-toggle" type="button" aria-label="Photobooth hai ảnh" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/><path d="M4 3v4M2 5h4M20 18v4M18 20h4"/></svg></button>
         <div id="boothFirst" class="booth-first" hidden><img id="boothThumb" alt="Ảnh thứ nhất"><button id="boothClear" type="button" aria-label="Chụp lại ảnh thứ nhất">×</button></div>
         <div id="boothStep" class="booth-step" hidden></div>
+        <div id="boothPicker" class="booth-picker" hidden>
+          <div class="booth-picker-title"><strong>Chọn khung Photobooth</strong><button id="boothPickerClose" type="button" aria-label="Đóng">×</button></div>
+          <div class="booth-picker-grid">
+            <button type="button" data-booth-theme="plain"><span class="booth-sample booth-sample-plain"></span>Khung trắng</button>
+            <button type="button" data-booth-theme="kimetsu"><span class="booth-sample"><img alt=""></span>Kimetsu</button>
+            <button type="button" data-booth-theme="onepiece"><span class="booth-sample"><img alt=""></span>One Piece</button>
+          </div>
+          <button type="button" class="booth-off" data-booth-theme="off">Chụp thường</button>
+        </div>
         <div class="record-progress" id="recordProgress"></div>
         <div class="record-time" id="recordTime">00:00 / 01:00</div>
       </div>
@@ -800,11 +834,23 @@ function showCamera() {
   const shutter = $('#takePhoto');
   $('#boothToggle').onclick = () => {
     if (holding || boothBusy || state.recorder?.state === 'recording') return;
-    boothMode = !boothMode;
-    if (boothMode) loadBoothFrame();
-    boothFirst = null;
-    renderBooth();
+    openBoothPicker();
   };
+  $('#boothPickerClose').onclick = () => { $('#boothPicker').hidden = true; };
+  $('#boothPicker').querySelectorAll('[data-booth-theme]').forEach(btn=>{
+    btn.onclick = () => {
+      if (boothBusy) return;
+      const theme = btn.dataset.boothTheme;
+      if (theme === 'off') { resetBooth(); }
+      else {
+        boothMode = true;
+        boothTheme = theme;
+        loadBoothFrame(theme);
+      }
+      $('#boothPicker').hidden = true;
+      renderBooth();
+    };
+  });
   $('#boothClear').onclick = () => {
     if (boothBusy) return;
     boothFirst = null;
@@ -923,7 +969,7 @@ context.restore();
     const combined = document.createElement('canvas');
     combined.width = combined.height = 1080;
     const ctx = combined.getContext('2d');
-    ctx.fillStyle = '#fff6e2';
+    ctx.fillStyle = boothTheme === 'plain' ? '#fff' : '#fff6e2';
     ctx.fillRect(0,0,1080,1080);
     boothDraw(ctx,boothFirst,76,64,928,454);
     boothDraw(ctx,canvas,76,540,928,466);
@@ -931,7 +977,7 @@ context.restore();
     loadBoothFrame().then(frame => {
       if (!video.isConnected) { boothBusy = false; return; }
       if (frame) ctx.drawImage(frame,0,0,1080,1080);
-      else {
+      else if (boothTheme !== 'plain') {
         ctx.strokeStyle = '#fff6e2';
         ctx.lineWidth = 10;
         ctx.strokeRect(76,64,928,454);
