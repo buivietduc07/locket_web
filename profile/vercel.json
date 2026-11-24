@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "output",
+  "rewrites": [
+    {
+      "source": "/profile",
+      "destination": "/profile/index.html"
+    },
+    {
+      "source": "/profile/",
+      "destination": "/profile/index.html"
+    }
+  ]
+}
