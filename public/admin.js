@@ -5,11 +5,11 @@ const defaults={
   3:[[64,54,952,310],[64,385,952,310],[64,716,952,310]],
   4:[[54,54,475,475],[551,54,475,475],[54,551,475,475],[551,551,475,475]]
 };
-let secret='',frames=[],editing='',slots=[],picture=null,objectURL='',drag=null,revision=0;
+let frames=[],editing='',slots=[],picture=null,objectURL='',drag=null,revision=0;
 const canvas=$('preview'),ctx=canvas.getContext('2d');
 function status(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
 async function request(url,options={}){
-  const response=await fetch(url,{...options,cache:'no-store',headers:{...options.headers,Authorization:'Bearer '+secret}});
+  const response=await fetch(url,{...options,cache:'no-store',credentials:'same-origin',headers:{...options.headers}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(data.error||'HTTP '+response.status);
   return data;
@@ -109,13 +109,14 @@ function renderList(){
   }
 }
 async function refresh(){frames=(await request('/api/booth/admin')).frames||[];renderList();}
-$('loginForm').onsubmit=async e=>{
-  e.preventDefault();secret=$('password').value;$('password').value='';
-  const btn=e.currentTarget.querySelector('button');btn.disabled=true;
-  try{await refresh();$('loginPanel').hidden=true;$('workspace').hidden=false;newFrame();status('Đã đăng nhập.');}
-  catch(err){secret='';status(err.message,true);}finally{btn.disabled=false;}
-};
-$('logout').onclick=()=>{secret='';frames=[];newFrame();$('workspace').hidden=true;$('loginPanel').hidden=false;status('Đã đăng xuất.');};
+async function checkAccess(){
+  const btn=$('checkAccess');btn.disabled=true;
+  try{await refresh();$('loginPanel').hidden=true;$('workspace').hidden=false;newFrame();status('Đã xác minh quyền quản trị.');}
+  catch(err){$('workspace').hidden=true;$('loginPanel').hidden=false;status(err.message,true);}finally{btn.disabled=false;}
+}
+$('checkAccess').onclick=checkAccess;
+$('logout').onclick=()=>{location.href='/';};
+checkAccess();
 $('frameCount').onchange=resetSlots;$('resetSlots').onclick=resetSlots;$('newFrame').onclick=newFrame;
 $('frameFile').onchange=()=>{
   const file=$('frameFile').files[0];if(!file)return;
