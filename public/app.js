@@ -760,10 +760,13 @@ function openBoothPicker() {
     }
   });
 }
+let aiMode = false;
+let aiBusy = false;
 let boothMode = false;
 let boothFirst = null;
 let boothBusy = false;
 function resetBooth() {
+  aiMode = false;
   boothFirst = null;
   boothMode = false;
 }
@@ -772,10 +775,10 @@ function renderBooth() {
   const preview = $('#boothFirst');
   const label = $('#boothStep');
   if (!button || !preview || !label) return;
-  button.setAttribute('aria-pressed', String(boothMode));
+  button.setAttribute('aria-pressed', String(boothMode || aiMode));
   preview.hidden = !boothMode || !boothFirst;
-  label.hidden = !boothMode;
-  label.textContent = boothFirst ? '1/2 - Chụp ảnh tiếp theo' : '0/2 - Photobooth';
+  label.hidden = !boothMode && !aiMode;
+  label.textContent = aiMode ? 'AI giải toán' : boothFirst ? '1/2 - Chụp ảnh tiếp theo' : '0/2 - Photobooth';
   if (boothFirst) {
     const thumb = document.createElement('canvas');
     thumb.width = thumb.height = 176;
@@ -814,6 +817,7 @@ function showCamera() {
             <button type="button" data-booth-theme="kimetsu"><span class="booth-sample"><img alt=""></span>Kimetsu</button>
             <button type="button" data-booth-theme="onepiece"><span class="booth-sample"><img alt=""></span>One Piece</button>
           </div>
+          <button type="button" class="booth-off" id="aiFilter">AI giải toán</button>
           <button type="button" class="booth-off" data-booth-theme="off">Chụp thường</button>
         </div>
         <div class="record-progress" id="recordProgress"></div>
@@ -833,13 +837,24 @@ function showCamera() {
   let recordingStarted = false;
   const shutter = $('#takePhoto');
   $('#boothToggle').onclick = () => {
-    if (holding || boothBusy || state.recorder?.state === 'recording') return;
+    if (holding || boothBusy || aiBusy || state.recorder?.state === 'recording') return;
     openBoothPicker();
+  };
+  $('#aiFilter').onclick = () => {
+    if (aiBusy || boothBusy) return;
+    resetBooth();
+    aiMode = true;
+    $('#aiAnswer')?.remove();
+    $('#boothPicker').hidden = true;
+    renderBooth();
+    toast('Ảnh bài toán sẽ được gửi tới Gemini AI khi bạn chụp.');
   };
   $('#boothPickerClose').onclick = () => { $('#boothPicker').hidden = true; };
   $('#boothPicker').querySelectorAll('[data-booth-theme]').forEach(btn=>{
     btn.onclick = () => {
-      if (boothBusy) return;
+      if (boothBusy || aiBusy) return;
+      aiMode = false;
+      $('#aiAnswer')?.remove();
       const theme = btn.dataset.boothTheme;
       if (theme === 'off') { resetBooth(); }
       else {
@@ -867,7 +882,7 @@ function showCamera() {
     shutter.setPointerCapture?.(event.pointerId);
     holdTimer = setTimeout(() => {
       holdTimer = null;
-      if (holding && !boothMode) recordingStarted = startRecording();
+      if (holding && !boothMode && !aiMode) recordingStarted = startRecording();
     }, 300);
   });
 
@@ -937,8 +952,47 @@ async function startCamera(facing = 'user') {
   }
 }
 
+async function solveMathPhoto(canvas) {
+  if (aiBusy) return;
+  aiBusy = true;
+  const stage = $('#cameraStage');
+  const shutter = $('#takePhoto');
+  if (!stage || !shutter) { aiBusy = false; return; }
+  shutter.disabled = true;
+  stage.querySelector('#aiAnswer')?.remove();
+  try {
+    toast('AI đang đọc bài toán...');
+    const blob = await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.85));
+    if (!blob) throw new Error('Không tạo được ảnh.');
+    const form = new FormData();
+    form.append('photo',blob,'math.jpg');
+    const data = await api('/api/ai-filter',{method:'POST',body:form});
+    if (!stage.isConnected || !aiMode) return;
+    const panel=document.createElement('div');
+    panel.id='aiAnswer';
+    panel.className='ai-answer';
+    panel.setAttribute('role','region');
+    panel.setAttribute('aria-label','Đáp án AI');
+    const title=document.createElement('strong');
+    title.textContent='Đáp án AI';
+    const content=document.createElement('div');
+    content.className='ai-answer-content';
+    content.textContent=String(data.answer||'Không có đáp án.');
+    const close=document.createElement('button');
+    close.type='button';
+    close.textContent='Đóng';
+    close.onclick=()=>panel.remove();
+    panel.append(title,content,close);
+    stage.append(panel);
+  } catch(err) {
+    if(stage.isConnected)toast(err.message,true);
+  } finally {
+    aiBusy=false;
+    if(shutter.isConnected)shutter.disabled=false;
+  }
+}
 function takePhoto() {
-  if (boothBusy) return;
+  if (boothBusy || aiBusy) return;
   const video = $('#liveVideo');
   if (!state.stream || !video?.videoWidth) { toast('Camera chưa sẵn sàng.', true); return; }
   const canvas = document.createElement('canvas');
@@ -959,6 +1013,7 @@ if (isMirrored) {
 
 context.drawImage(video, 0, 0, canvas.width, canvas.height);
 context.restore();
+  if (aiMode) { solveMathPhoto(canvas); return; }
   if (boothBusy) return;
   if (boothMode) {
     if (!boothFirst) {
