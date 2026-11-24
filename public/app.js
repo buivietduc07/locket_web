@@ -28,27 +28,24 @@ function momentCard(m, isArchive = false) {
   const clip = media(m, true);
 
   const author = field(m, 'user', 'sender', 'creator', 'owner');
-
+  const sourceUid = field(m, 'user_uid', 'author_uid', 'sender_uid', 'owner_uid');
   const authorId = String(
+    sourceUid ||
     (typeof author === 'string' ? author : uid(author)) ||
-    field(m, 'author_uid', 'user_uid') ||
     ''
-  );
+  ).split('/').pop();
 
   const myUid = uid(state.profile);
-
   const friend = state.friends.find(f => uid(f) === authorId);
-
-  const isMine = authorId && myUid && authorId === myUid;
-
-  const person = isArchive || isMine
+  const isMine = Boolean(authorId && myUid && authorId === myUid);
+  const authorProfile = field(m, 'author_profile');
+  const person = isMine
     ? state.profile
-    : friend || (author && typeof author === 'object' ? author : null);
+    : friend || (authorProfile && typeof authorProfile === 'object' ? authorProfile : null) ||
+      (author && typeof author === 'object' ? author : null) ||
+      (isArchive ? state.profile : null);
 
-  const name = person
-    ? displayName(person)
-    : 'Chưa xác định người đăng';
-
+  const name = person ? displayName(person) : 'Chưa xác định người đăng';
   const user = person ? username(person) : '';
 
   const time = date(
