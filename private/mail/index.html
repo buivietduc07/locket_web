@@ -33,7 +33,7 @@ main{max-width:1030px;margin:auto;padding:40px 20px 72px}nav{display:flex;justif
 <label for="custom">Tự đặt tên</label>
 <div class="inputline"><input id="custom" autocomplete="off" maxlength="40" placeholder="Ví dụ: buivducdz" spellcheck="false" aria-describedby="rule"><b>@klab.id.vn</b></div>
 <div class="hint" id="rule">Chỉ dùng chữ thường a-z, số 0-9, dấu chấm, gạch dưới hoặc gạch ngang. Từ 3 đến 40 ký tự.</div>
-<div class="actions"><button class="primary" id="apply" type="button">Dùng tên này</button><button id="random" type="button">Tạo ngẫu nhiên</button></div>
+<div class="actions"><button class="primary" id="apply" type="button">Tạo trên Cloudflare</button><button id="random" type="button">Đổi tên ngẫu nhiên</button></div>
 <div class="status" id="status" role="status"></div>
 </section>
 <aside class="panel">
@@ -50,31 +50,71 @@ main{max-width:1030px;margin:auto;padding:40px 20px 72px}nav{display:flex;justif
 </aside>
 </div>
 <section class="panel history">
-<div class="history-header"><h2>Địa chỉ đã tạo trên thiết bị này</h2><button id="clear" type="button">Xóa danh sách</button></div>
+<div class="history-header"><h2>Routing Rules trên Cloudflare</h2><button id="refresh" type="button">Đồng bộ lại</button></div>
 <ul id="recent"></ul>
-<p class="empty" id="empty" hidden>Chưa có địa chỉ nào.</p>
+<p class="empty" id="empty" hidden>Chưa có địa chỉ hoặc chưa kết nối được Cloudflare.</p>
 </section>
-<p class="footnote"><strong>Quan trọng:</strong> Trang này tạo và lưu tên email trên trình duyệt, không tạo tài khoản Gmail và không đọc nội dung thư trực tiếp. Mail chỉ nhận được khi Cloudflare đã bật quy tắc Catch-all hoặc có quy tắc chuyển tiếp phù hợp cho <strong>klab.id.vn</strong>. Người khác cũng có thể gửi đến cùng địa chỉ; không dùng địa chỉ công khai làm hộp thư bảo mật.</p>
+<p class="footnote"><strong>Lưu ý quan trọng:</strong> Bấm Xóa chỉ xóa quy tắc mà trang này đã tạo trên Cloudflare. Khi <strong>Catch-all</strong> còn bật, địa chỉ đã xóa vẫn có thể nhận thư qua Catch-all. Muốn ngừng nhận thư cho địa chỉ đã xóa, cần tắt Catch-all hoặc dùng quy tắc chặn riêng. Trang không đọc nội dung Gmail trực tiếp.</p>
 </main>
 <script>
 (function(){
 'use strict';
-const domain='klab.id.vn', key='klab-mail-recent-v1';
+const domain='klab.id.vn';
 const $=id=>document.getElementById(id);
-let current='';
-function recent(){try{let x=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(x)?x.filter(v=>typeof v==='string'&&v.endsWith('@'+domain)).slice(0,20):[]}catch{return []}}
-function persist(v){try{localStorage.setItem(key,JSON.stringify([v,...recent().filter(x=>x!==v)].slice(0,20)))}catch{}}
-function notice(t){$('status').textContent=t}
-function paint(){const list=$('recent');list.textContent='';const a=recent();$('empty').hidden=a.length>0;for(const s of a){const li=document.createElement('li'),code=document.createElement('code'),btn=document.createElement('button');code.textContent=s;btn.type='button';btn.textContent='Sao chép';btn.addEventListener('click',()=>copy(s));li.append(code,btn);list.append(li)}}
-function use(local){current=local+'@'+domain;$('generated').textContent=current;persist(current);paint();notice('Địa chỉ sẵn sàng để sao chép. Việc nhận thư phụ thuộc quy tắc Email Routing.')}
-async function copy(t){try{await navigator.clipboard.writeText(t);notice('Đã sao chép '+t)}catch{notice('Không sao chép tự động được. Hãy chọn và sao chép thủ công.')}}
-function rand(){const x=new Uint8Array(5);crypto.getRandomValues(x);return 'mail'+Array.from(x,b=>b.toString(16).padStart(2,'0')).join('')}
-$('random').addEventListener('click',()=>{use(rand());$('custom').value=''});
+let current='', rules=[],busy=false;
+function notice(text){$('status').textContent=text}
+function randomName(){const bytes=new Uint8Array(5);crypto.getRandomValues(bytes);return 'mail'+Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')}
+function setCurrent(local){current=local+'@'+domain;$('generated').textContent=current}
+async function request(path,options={}){
+  const resp=await fetch('/api/mail/rules'+path,{credentials:'same-origin',cache:'no-store',...options});
+  const data=await resp.json().catch(()=>({}));
+  if(!resp.ok)throw Error(data.error||'Máy chủ trả lỗi HTTP '+resp.status);
+  return data;
+}
+async function copy(text){try{await navigator.clipboard.writeText(text);notice('Đã sao chép '+text)}catch{notice('Trình duyệt không thể sao chép tự động.')}}
+function render(){
+  const list=$('recent');list.textContent='';
+  $('empty').hidden=rules.length>0;
+  for(const rule of rules){
+    const li=document.createElement('li');
+    const code=document.createElement('code');code.textContent=rule.address;
+    const buttons=document.createElement('div');buttons.style.cssText='display:flex;gap:7px;flex-wrap:wrap';
+    const copyButton=document.createElement('button');copyButton.type='button';copyButton.textContent='Sao chép';copyButton.addEventListener('click',()=>copy(rule.address));
+    buttons.append(copyButton);
+    if(rule.managed){
+      const deleteButton=document.createElement('button');deleteButton.type='button';deleteButton.textContent='Xóa';
+      deleteButton.addEventListener('click',async()=>{
+        if(!confirm('Xóa rule '+rule.address+' trên Cloudflare? Catch-all đang bật có thể vẫn nhận mail đến địa chỉ này.'))return;
+        deleteButton.disabled=true;
+        try{await request('/'+encodeURIComponent(rule.id),{method:'DELETE'});notice('Đã xóa rule. Catch-all vẫn có thể nhận thư đến địa chỉ này.');await refresh()}
+        catch(err){notice('Lỗi xóa: '+err.message);deleteButton.disabled=false}
+      });
+      buttons.append(deleteButton);
+    }
+    li.append(code,buttons);list.append(li);
+  }
+}
+async function refresh(){
+  try{const data=await request('');rules=data.rules||[];render();notice('Đã đồng bộ '+rules.length+' quy tắc email từ Cloudflare.')}
+  catch(err){notice('Chưa đồng bộ được: '+err.message)}
+}
+async function create(){
+  if(busy)return;
+  const local=$('custom').value.trim().toLowerCase()||current.split('@')[0];
+  if(!/^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]$/.test(local)||local.includes('..')){notice('Tên không hợp lệ: chỉ dùng 3-40 ký tự a-z, 0-9, dấu chấm, gạch dưới, gạch ngang.');return}
+  busy=true;$('apply').disabled=true;
+  try{
+    const data=await request('',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({local})});
+    setCurrent(local);await refresh();notice('Đã tạo thật trên Cloudflare: '+data.address)
+  }catch(err){notice('Không tạo được: '+err.message)}
+  finally{busy=false;$('apply').disabled=false}
+}
+$('apply').addEventListener('click',create);
+$('random').addEventListener('click',()=>{setCurrent(randomName());$('custom').value='';notice('Đã tạo tên ngẫu nhiên. Nhấn Tạo trên Cloudflare để kích hoạt địa chỉ.')});
 $('copy').addEventListener('click',()=>copy(current));
-$('apply').addEventListener('click',()=>{const s=$('custom').value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]$/.test(s)||s.includes('..')){notice('Tên không hợp lệ. Kiểm tra lại hướng dẫn bên dưới.');return}use(s)});
-$('custom').addEventListener('keydown',e=>{if(e.key==='Enter')$('apply').click()});
-$('clear').addEventListener('click',()=>{try{localStorage.removeItem(key)}catch{}paint();notice('Đã xóa danh sách trên thiết bị này. Các địa chỉ vẫn có thể nhận thư qua Catch-all.')});
-const last=recent()[0];use(last?last.split('@')[0]:rand());
+$('refresh').addEventListener('click',refresh);
+$('custom').addEventListener('keydown',e=>{if(e.key==='Enter')create()});
+setCurrent(randomName());refresh();
 })();
 </script>
 </body>
