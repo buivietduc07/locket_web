@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { LocketClient } = require('locket.js');
-
+import { notifyTelegramLogin } from '../lib/telegram.js';
 
 
 const app = express();
