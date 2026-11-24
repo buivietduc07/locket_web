@@ -932,7 +932,9 @@ app.post('/api/ai-filter',(req,res,next)=>{
         .sort((a,b)=>Number(!a.includes('flash'))-Number(!b.includes('flash'))||b.localeCompare(a,undefined,{numeric:true}));
     };
     let data=null,lastStatus=404,attempted=new Set();
-    while(attempted.size<4){
+    let calls=0;
+    const transient=new Set([500,502,503,504]);
+    while(calls<4){
       if(!candidates.length){
         if(listed)break;
         listed=true;
@@ -942,14 +944,22 @@ app.post('/api/ai-filter',(req,res,next)=>{
       const selected=candidates.shift();
       if(attempted.has(selected))continue;
       attempted.add(selected);
-      const response=await fetch(base+'/models/'+selected+':generateContent',{method:'POST',headers,signal,body});
+      calls++;
+      let response=await fetch(base+'/models/'+selected+':generateContent',{method:'POST',headers,signal,body});
+      if(transient.has(response.status)&&calls<4&&!signal.aborted){
+        console.warn('[AI filter] Temporary HTTP',response.status,'model:',selected,'retrying once');
+        await response.body?.cancel().catch(()=>{});
+        await new Promise(resolve=>setTimeout(resolve,800));
+        calls++;
+        response=await fetch(base+'/models/'+selected+':generateContent',{method:'POST',headers,signal,body});
+      }
       const result=await response.json().catch(()=>({}));
       if(response.ok){data=result;console.info('[AI filter] Model OK:',selected);break;}
       lastStatus=response.status;
       console.warn('[AI filter] Gemini HTTP',response.status,'model:',selected,'status:',String(result.error?.status||''),'reason:',String(result.error?.message||'').replace(/AIza[\w-]+/g,'[redacted]').replace(/https?:\/\/\S+/g,'[url]').slice(0,240));
-      if(response.status!==404)break;
+      if(response.status!==404&&!transient.has(response.status))break;
     }
-    if(!data)return res.status(lastStatus===429?429:502).json({error:lastStatus===429?'Gemini đang vượt hạn mức.':lastStatus===404?'Gemini không có model phù hợp hoặc tài khoản chưa được cấp quyền. Kiểm tra log Vercel.':'Gemini HTTP '+lastStatus+'. Kiểm tra API key và log Vercel.'});
+    if(!data)return res.status(lastStatus===429?429:transient.has(lastStatus)?503:502).json({error:lastStatus===429?'Gemini đang vượt hạn mức.':transient.has(lastStatus)?'Gemini đang quá tải hoặc tạm thời không khả dụng. Hãy thử lại sau.':lastStatus===404?'Gemini không có model phù hợp hoặc tài khoản chưa được cấp quyền. Kiểm tra log Vercel.':'Gemini HTTP '+lastStatus+'. Kiểm tra API key và log Vercel.'});
     const answer=(data.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('\n').trim();
     return res.json({answer:answer||'AI chưa đọc được bài toán. Hãy chụp rõ hơn.'});
   }catch(err){
