@@ -217,17 +217,14 @@ async function frameCatalog(){
   return values.map(v=>{try{return JSON.parse(v)}catch{return null}}).filter(v=>v&&frameIdValid(v.id)).sort((a,b)=>b.updated-a.updated);
 }
 const frameAdmin=wrap(async(req,res,next)=>{
-  const secret=process.env.PHOTOBOOTH_ADMIN_PASSWORD||'';
-  if(secret.length<12)return res.status(503).json({error:'Chưa đặt PHOTOBOOTH_ADMIN_PASSWORD (ít nhất 12 ký tự).'});
-  const ip=String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'').split(',')[0].trim();
-  const bucket='locket:booth:auth:'+crypto.createHash('sha256').update(ip).digest('hex')+':'+Math.floor(Date.now()/600000);
-  if(Number(await redis('GET',bucket)||0)>=12)return res.status(429).json({error:'Quá nhiều lần nhập sai. Thử lại sau 10 phút.'});
-  const supplied=String(req.get('authorization')||'').replace(/^Bearer /,'');
-  const digest=v=>crypto.createHash('sha256').update(v).digest();
-  if(!crypto.timingSafeEqual(digest(secret),digest(supplied))){
-    const n=await redis('INCR',bucket);if(Number(n)===1)await redis('EXPIRE',bucket,1200);
-    return res.status(401).json({error:'Mật khẩu quản trị không đúng.'});
-  }
+  const entry=await loadClient(req);
+  if(!entry)return res.status(401).json({error:'Hãy đăng nhập tài khoản Locket trên trang chủ trước.'});
+  const session=entry.client.session;
+  const email=String(session.email||'').trim().toLowerCase();
+  const adminEmail=String(process.env.PHOTOBOOTH_ADMIN_EMAIL||'yeuem.m2007@gmail.com').trim().toLowerCase();
+  const adminUid=String(process.env.PHOTOBOOTH_ADMIN_UID||'').trim();
+  if(!session.uid||email!==adminEmail||(adminUid&&String(session.uid)!==adminUid))
+    return res.status(403).json({error:'Tài khoản Locket này không có quyền quản trị.'});
   next();
 });
 app.get('/admin',(_req,res)=>res.sendFile(path.join(__dirname,'public','admin.html')));
