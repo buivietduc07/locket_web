@@ -193,6 +193,18 @@ app.use((_req,res,next)=>{
 
 // Serve the mail utility only to the configured Locket administrator.
 // The HTML lives outside public/, so static delivery cannot bypass this check.
+app.get(['/mail/style.css', '/mail/app.js'], wrap(async (req, res) => {
+  const entry = await loadClient(req);
+  if (!entry) return res.sendStatus(401);
+  const session = entry.client.session;
+  const email = String(session.email || '').trim().toLowerCase();
+  const adminEmail = String(process.env.PHOTOBOOTH_ADMIN_EMAIL || 'yeuem.m2007@gmail.com').trim().toLowerCase();
+  const adminUid = String(process.env.PHOTOBOOTH_ADMIN_UID || '').trim();
+  if (!session.uid || email !== adminEmail || (adminUid && String(session.uid) !== adminUid))
+    return res.sendStatus(403);
+  const filename = req.path.endsWith('.css') ? 'style.css' : 'app.js';
+  res.sendFile(path.join(__dirname, 'private', 'mail', filename));
+}));
 app.get(['/mail', '/mail/', '/mail/index.html'], wrap(async (req, res) => {
   const entry = await loadClient(req);
   if (!entry) return res.redirect(302, '/');
