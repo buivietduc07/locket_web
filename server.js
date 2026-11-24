@@ -266,6 +266,54 @@ app.get('/api/feed',wrap(async(req,res)=>{
 
   const history=await res.locals.client.moments.getMoments({limit:30,pageToken:cursor||null});
 
+  // SDK getMoments() gán user_uid bằng UID người xem. Đọc trường user
+  // từ lịch sử Firestore để lấy đúng người đăng (kể cả khi ảnh dùng URL CDN).
+  const historyAuthors = new Map();
+  try {
+    const client = res.locals.client;
+    const token = await client.session.getValidToken();
+    const structuredQuery = {
+      from: [{collectionId:'entries'}],
+      orderBy: [
+        {field:{fieldPath:'date'},direction:'DESCENDING'},
+        {field:{fieldPath:'__name__'},direction:'DESCENDING'}
+      ],
+      limit:30
+    };
+    const page = cursor && client.moments.decodeQueryCursor(cursor);
+    if (page) structuredQuery.startAt = {
+      values:[
+        {timestampValue:page.date},
+        {referenceValue:page.docName}
+      ],
+      before:false
+    };
+    const historyUrl = 'https://firestore.googleapis.com/v1/projects/locket-4252a/databases/locket/documents/history/'
+      + encodeURIComponent(client.session.uid) + ':runQuery';
+    const rawResponse = await fetch(historyUrl, {
+      method:'POST',
+      headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({structuredQuery}),
+      signal:AbortSignal.timeout(12000)
+    });
+    if (rawResponse.ok) {
+      const rows = await rawResponse.json();
+      for (const row of Array.isArray(rows)?rows:[]) {
+        const doc = row.document;
+        if (!doc || !doc.fields) continue;
+        const f = doc.fields;
+        const mid = f.canonical_uid?.stringValue || f.moment_uid?.stringValue || doc.name?.split('/').pop();
+        const rawUser = f.user?.stringValue || f.user?.referenceValue || '';
+        const owner = String(rawUser).split('/').pop();
+        if (mid && owner && /^[A-Za-z0-9_-]{8,128}$/.test(owner)) historyAuthors.set(String(mid),owner);
+      }
+    } else {
+      console.warn('[Locket] Không đọc được tác giả lịch sử:',rawResponse.status);
+    }
+  } catch(err) {
+    console.warn('[Locket] Không thể bổ sung người đăng từ Firestore:',err.message);
+  }
+
   // SDK gán nhầm UID của người xem cho bài lịch sử. Lấy UID chủ media
   // từ đường dẫn Firebase Storage users/<uid>/moments/... khi có đủ bằng chứng.
   const mediaOwner = moment => {
@@ -284,7 +332,8 @@ app.get('/api/feed',wrap(async(req,res)=>{
   const older = Array.isArray(history?.moments)
     ? history.moments.map(m => {
         const { user_uid: _viewerUid, ...moment } = m;
-        const owner = mediaOwner(moment);
+        const mid = String(moment.moment_uid || moment.canonical_uid || moment.id || '');
+        const owner = historyAuthors.get(mid) || mediaOwner(moment);
         return owner ? { ...moment, user_uid: owner } : moment;
       })
     : [];
